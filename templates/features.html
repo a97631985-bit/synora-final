@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  {% include "head.html" %}
+</head>
+<body class="bg-background text-on-surface antialiased min-h-screen flex flex-col selection:bg-primary-container selection:text-on-primary-container">
+<div class="ambient-bg"></div>
+{% include "public_nav.html" %}
+
+<main class="pt-24 pb-12 flex flex-col gap-12 max-w-[1200px] mx-auto px-5 md:px-10 flex-grow w-full">
+  <!-- Hero -->
+  <section class="flex flex-col items-center justify-center text-center py-20 gap-6 relative">
+    <div class="absolute inset-0 -z-10 pointer-events-none opacity-20">
+      <div class="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-primary rounded-full blur-[120px]"></div>
+    </div>
+    <span class="px-4 py-1.5 rounded-full glass-panel text-primary text-sm font-semibold uppercase tracking-widest border border-primary/20">Features</span>
+    <h1 class="text-[32px] md:text-[40px] font-bold tracking-[-0.03em] max-w-3xl leading-tight">
+      The Science of <br> <span class="text-gradient">Self-Healing.</span>
+    </h1>
+    <p class="text-lg text-on-surface-variant max-w-2xl">
+      Synora goes beyond simple scheduling. By intelligently adapting to your energy levels and unexpected disruptions, we create a continuous state of 'Adaptive Calm' for the modern student.
+    </p>
+  </section>
+
+  <!-- Feature 1: Autonomous Rescheduling -->
+  <section class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center py-6">
+    <div class="flex flex-col gap-3 order-2 md:order-1">
+      <div class="w-12 h-12 rounded-xl glass-panel flex items-center justify-center text-tertiary mb-2">
+        <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">auto_fix_high</span>
+      </div>
+      <h2 class="text-2xl font-bold tracking-[-0.03em]">Autonomous Rescheduling <span class="block text-primary/70 text-lg font-normal mt-1">(Self-Healing)</span></h2>
+      <p class="text-on-surface-variant">
+        Life happens. When a lecture runs late or you need extra time for an assignment, Synora's AI automatically monitors task completion and dynamically reshuffles your day. It ensures high-priority items are protected without overwhelming your schedule.
+      </p>
+      <ul class="flex flex-col gap-2 mt-4">
+        <li class="flex items-center gap-3 text-sm"><span class="material-symbols-outlined text-primary text-[18px]" style="font-variation-settings: 'FILL' 1;">check_circle</span> Dynamic timeline adjustments</li>
+        <li class="flex items-center gap-3 text-sm"><span class="material-symbols-outlined text-primary text-[18px]" style="font-variation-settings: 'FILL' 1;">check_circle</span> Priority protection</li>
+        <li class="flex items-center gap-3 text-sm"><span class="material-symbols-outlined text-primary text-[18px]" style="font-variation-settings: 'FILL' 1;">check_circle</span> Energy-aware task placement</li>
+      </ul>
+    </div>
+    <div class="order-1 md:order-2 glass-panel rounded-xl p-6 glow-effect relative overflow-hidden h-[400px]">
+      <div class="absolute inset-0 bg-gradient-to-br from-primary-container/20 to-transparent"></div>
+      <div class="relative z-10 flex flex-col gap-4 h-full">
+        <div class="flex justify-between items-center border-b border-white/5 pb-4">
+          <span class="text-sm font-semibold text-on-surface-variant">Today's Schedule</span>
+          <span class="px-2 py-1 rounded text-xs bg-tertiary/10 text-tertiary border border-tertiary/20 flex items-center gap-1">
+            <span class="material-symbols-outlined text-[14px]">bolt</span> Healing Active
+          </span>
+        </div>
+        <div class="flex flex-col gap-3 flex-grow justify-center">
+          <!-- Delayed Task -->
+          <div class="glass-panel rounded-lg p-3 border-l-2 border-l-error/50 opacity-50 relative">
+            <div class="absolute inset-0 bg-error/5 rounded-lg"></div>
+            <div class="flex justify-between items-center relative z-10">
+              <div>
+                <div class="text-base line-through text-on-surface-variant">Chem Lab Prep</div>
+                <div class="text-xs text-error">Missed • 2:00 PM</div>
+              </div>
+            </div>
+          </div>
+          <!-- AI Intervention Indicator -->
+          <div class="flex items-center justify-center py-2 relative">
+            <div class="w-[1px] h-8 bg-gradient-to-b from-error/30 to-tertiary/50"></div>
+            <div class="absolute bg-surface rounded-full p-1 border border-white/10 text-tertiary">
+              <span class="material-symbols-outlined text-sm animate-spin" style="animation-duration: 3s; font-variation-settings: 'FILL' 1;">sync</span>
+            </div>
+          </div>
+          <!-- Rescheduled Task -->
+          <div class="glass-panel rounded-lg p-4 border border-tertiary/30 relative overflow-hidden">
+            <div class="absolute left-0 top-0 bottom-0 w-1 synora-gradient"></div>
+            <div class="absolute inset-0 bg-tertiary/5"></div>
+            <div class="flex justify-between items-center relative z-10">
+              <div>
+                <div class="text-sm font-semibold text-on-surface">Chem Lab Prep</div>
+                <div class="text-xs text-tertiary flex items-center gap-1 mt-1">
+                  <span class="material-symbols-outlined text-[12px]">schedule</span> Rescheduled • 4:30 PM
+                </div>
+              </div>
+              <div class="w-8 h-8 rounded-full bg-surface border border-white/10 flex items-center justify-center">
+                <span class="material-symbols-outlined text-sm text-primary" style="font-variation-settings: 'FILL' 1;">check</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Feature 2: Biometric Productivity -->
+  <section class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center py-6">
+    <div class="glass-panel rounded-xl p-6 h-[400px] flex flex-col justify-between relative overflow-hidden">
+      <div class="absolute top-0 right-0 w-64 h-64 bg-secondary-container/20 rounded-full blur-[80px] -z-10 translate-x-1/2 -translate-y-1/2"></div>
+      <div class="text-sm font-semibold text-on-surface-variant border-b border-white/5 pb-4">Energy State Mapping</div>
+      <div class="flex flex-col gap-4 mt-auto">
+        <!-- Low Energy -->
+        <div class="flex items-center gap-4 bg-surface/50 rounded-lg p-3 border border-white/5">
+          <div class="w-2 h-10 rounded-full bg-surface-variant"></div>
+          <div class="flex-1">
+            <div class="text-sm font-semibold text-on-surface">Low Focus</div>
+            <div class="text-xs text-on-surface-variant">Admin, Emails, Light reading</div>
+          </div>
+        </div>
+        <!-- Active Energy -->
+        <div class="flex items-center gap-4 bg-surface/50 rounded-lg p-3 border border-white/5">
+          <div class="w-2 h-10 rounded-full bg-primary/50"></div>
+          <div class="flex-1">
+            <div class="text-sm font-semibold text-on-surface">Active Focus</div>
+            <div class="text-xs text-on-surface-variant">Lectures, Standard assignments</div>
+          </div>
+        </div>
+        <!-- Peak Energy -->
+        <div class="flex items-center gap-4 bg-surface/50 rounded-lg p-3 border border-tertiary/20 bg-tertiary/5">
+          <div class="w-2 h-10 rounded-full synora-gradient shadow-[0_0_10px_rgba(76,215,246,0.5)]"></div>
+          <div class="flex-1">
+            <div class="text-sm font-semibold text-tertiary">Peak Focus</div>
+            <div class="text-xs text-on-surface-variant">Deep study, Complex problem solving</div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div class="flex flex-col gap-3">
+      <div class="w-12 h-12 rounded-xl glass-panel flex items-center justify-center text-secondary mb-2">
+        <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">monitor_heart</span>
+      </div>
+      <h2 class="text-2xl font-bold tracking-[-0.03em]">Biometric Productivity <span class="block text-primary/70 text-lg font-normal mt-1">(Energy Tracking)</span></h2>
+      <p class="text-on-surface-variant">
+        Not all hours are created equal. Synora tracks your daily rhythms to identify your Low, Active, and Peak focus windows. It intelligently maps demanding tasks like deep study to your peak hours, and saves administrative work for when your energy naturally dips.
+      </p>
+      <div class="flex gap-4 mt-2 flex-wrap">
+        <span class="px-3 py-1.5 rounded-full bg-surface border border-white/10 text-xs font-medium text-on-surface-variant flex items-center gap-1">
+          <span class="material-symbols-outlined text-[14px]">battery_charging_full</span> Energy Mapping
+        </span>
+        <span class="px-3 py-1.5 rounded-full bg-surface border border-white/10 text-xs font-medium text-on-surface-variant flex items-center gap-1">
+          <span class="material-symbols-outlined text-[14px]">psychology</span> Cognitive Load Balancing
+        </span>
+      </div>
+      <a href="/signup" class="mt-4 w-max px-6 py-3 synora-gradient text-on-primary text-sm font-bold rounded-xl hover:shadow-[0_0_20px_rgba(154,211,182,0.4)] transition-all active:scale-95">
+        Track Your Energy
+      </a>
+    </div>
+  </section>
+
+  <!-- Feature 3: Mastery-Based Assessments -->
+  <section class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center py-6">
+    <div class="flex flex-col gap-3 order-2 md:order-1">
+      <div class="w-12 h-12 rounded-xl glass-panel flex items-center justify-center text-primary mb-2">
+        <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">school</span>
+      </div>
+      <h2 class="text-2xl font-bold tracking-[-0.03em]">Mastery-Based Assessments</h2>
+      <p class="text-on-surface-variant">
+        Stop guessing what to study. The Synora AI Quiz engine identifies your specific knowledge gaps through continuous micro-assessments. It then automatically schedules targeted, bite-sized study sessions right before exams, ensuring maximum retention with minimal stress.
+      </p>
+      <a href="/signup" class="mt-2 w-max px-6 py-3 synora-gradient text-on-primary text-sm font-bold rounded-xl hover:shadow-[0_0_20px_rgba(154,211,182,0.4)] transition-all active:scale-95">
+        Try the AI Quiz
+      </a>
+    </div>
+    <div class="order-1 md:order-2 glass-panel rounded-xl p-6 h-[400px] flex items-center justify-center relative overflow-hidden">
+      <div class="grid grid-cols-3 gap-4 w-full max-w-[280px]">
+        <div class="h-24 rounded-lg bg-surface border border-white/5 flex flex-col justify-end p-2 opacity-50">
+          <div class="w-full h-1/3 bg-primary-container rounded"></div>
+        </div>
+        <div class="h-24 rounded-lg bg-surface border border-primary/30 flex flex-col justify-end p-2 relative shadow-[0_0_15px_rgba(41,95,72,0.3)]">
+          <div class="absolute -top-3 left-1/2 -translate-x-1/2 bg-primary text-on-primary text-[10px] font-bold px-2 py-0.5 rounded-full z-10 whitespace-nowrap">Focus Target</div>
+          <div class="w-full h-1/4 bg-primary rounded animate-pulse"></div>
+        </div>
+        <div class="h-24 rounded-lg bg-surface border border-white/5 flex flex-col justify-end p-2">
+          <div class="w-full h-3/4 bg-primary-fixed-dim rounded"></div>
+        </div>
+        <div class="col-span-3 mt-4 text-center">
+          <div class="text-sm text-on-surface-variant font-medium">Cellular Biology</div>
+          <div class="text-xs text-primary mt-1">Generating 15m review session...</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Feature 4: Focus Environments -->
+  <section class="grid grid-cols-1 md:grid-cols-2 gap-6 items-center py-6">
+    <div class="glass-panel rounded-xl p-6 h-[400px] flex flex-col items-center justify-center relative overflow-hidden">
+      <div class="w-48 h-48 rounded-full border border-white/10 flex items-center justify-center relative">
+        <svg class="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 100 100">
+          <circle cx="50" cy="50" fill="none" r="48" stroke="rgba(255,255,255,0.05)" stroke-width="2"></circle>
+          <circle cx="50" cy="50" fill="none" r="48" stroke="url(#synoraGrad)" stroke-dasharray="301.59" stroke-dashoffset="75" stroke-linecap="round" stroke-width="2"></circle>
+          <defs>
+            <linearGradient id="synoraGrad" x1="0%" x2="100%" y1="0%" y2="100%">
+              <stop offset="0%" stop-color="#9ad3b6"></stop>
+              <stop offset="100%" stop-color="#4cd7f6"></stop>
+            </linearGradient>
+          </defs>
+        </svg>
+        <div class="text-center">
+          <div class="text-4xl font-light text-on-surface tracking-widest">24<span class="text-on-surface-variant">:</span>59</div>
+          <div class="text-xs text-primary font-medium mt-1">Deep Work</div>
+        </div>
+      </div>
+      <div class="flex gap-4 mt-8">
+        <button class="w-10 h-10 rounded-full bg-surface border border-white/10 flex items-center justify-center text-on-surface hover:text-primary transition-colors">
+          <span class="material-symbols-outlined text-sm">pause</span>
+        </button>
+        <button class="w-10 h-10 rounded-full bg-surface border border-white/10 flex items-center justify-center text-on-surface hover:text-error transition-colors">
+          <span class="material-symbols-outlined text-sm">stop</span>
+        </button>
+      </div>
+    </div>
+    <div class="flex flex-col gap-3">
+      <div class="w-12 h-12 rounded-xl glass-panel flex items-center justify-center text-on-surface mb-2">
+        <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">timer</span>
+      </div>
+      <h2 class="text-2xl font-bold tracking-[-0.03em]">Focus Environments</h2>
+      <p class="text-on-surface-variant">
+        Immersion requires absence of distraction. Our minimalist timers and stopwatches aren't just standalone tools—they integrate directly with the self-healing schedule. When you start a focus session, Synora automatically protects that time and adjusts surrounding tasks.
+      </p>
+      <a href="/signup" class="mt-2 w-max px-6 py-3 synora-gradient text-on-primary text-sm font-bold rounded-xl hover:shadow-[0_0_20px_rgba(154,211,182,0.4)] transition-all active:scale-95">
+        Start Focusing
+      </a>
+    </div>
+  </section>
+
+  <!-- CTA Section -->
+  <section class="py-20 text-center flex flex-col items-center gap-6 glass-panel rounded-2xl border border-primary/20 relative overflow-hidden mt-12">
+    <div class="absolute inset-0 -z-10 pointer-events-none opacity-10">
+      <div class="absolute bottom-0 right-0 w-[400px] h-[400px] bg-tertiary rounded-full blur-[100px]"></div>
+    </div>
+    <h2 class="text-2xl font-bold tracking-[-0.03em]">Experience the Future of Productivity.</h2>
+    <p class="text-on-surface-variant max-w-md">
+      Join thousands of students who have traded academic anxiety for adaptive calm.
+    </p>
+    <a href="/signup" class="synora-gradient text-on-primary text-sm font-bold px-8 py-4 rounded-xl hover:shadow-[0_0_20px_rgba(154,211,182,0.4)] transition-all active:scale-95 mt-4 flex items-center gap-2">
+      Get Started
+      <span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">arrow_forward</span>
+    </a>
+  </section>
+</main>
+
+<!-- Footer -->
+<footer class="bg-surface-container-lowest w-full py-12 border-t border-white/5">
+  <div class="flex flex-col md:flex-row justify-between items-center px-5 md:px-10 max-w-[1200px] mx-auto gap-4">
+    <img src="/static/logo.png" alt="Synora AI Logo" class="h-8 w-auto object-contain opacity-80 hover:opacity-100 transition-opacity">
+    <nav class="flex flex-wrap justify-center gap-6 text-sm font-semibold">
+      <a class="text-on-surface-variant hover:text-tertiary transition-colors opacity-80 hover:opacity-100" href="#">Privacy Policy</a>
+      <a class="text-on-surface-variant hover:text-tertiary transition-colors opacity-80 hover:opacity-100" href="#">Terms of Service</a>
+      <a class="text-on-surface-variant hover:text-tertiary transition-colors opacity-80 hover:opacity-100" href="#">Help Center</a>
+      <a class="text-on-surface-variant hover:text-tertiary transition-colors opacity-80 hover:opacity-100" href="#">Community</a>
+    </nav>
+    <div class="text-on-surface-variant text-sm text-center md:text-left">
+      © 2026 Synora AI. Adaptive Calm for the Modern Student.
+    </div>
+  </div>
+</footer>
+</body>
+</html>

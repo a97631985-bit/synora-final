@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  {% include "head.html" %}
+</head>
+<body class="bg-background text-on-surface min-h-screen flex flex-col items-center justify-center relative overflow-hidden font-body-md antialiased">
+<div class="ambient-bg"></div>
+
+<!-- Registration Card Container -->
+<main class="w-full max-w-md px-5 md:px-0 relative z-10 flex flex-col items-center py-10">
+  <!-- Brand Logo Area -->
+  <div class="flex justify-center mb-8">
+    <img src="/static/logo.png" alt="Synora AI Logo" class="h-12 w-auto object-contain">
+  </div>
+
+  <!-- Glassmorphism Card -->
+  <div class="glass-panel rounded-xl p-8 shadow-2xl relative overflow-hidden w-full">
+    <!-- Subtle top highlight -->
+    <div class="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+    <div class="absolute -top-20 -right-20 w-40 h-40 bg-tertiary/10 rounded-full blur-3xl"></div>
+
+    <div class="text-center mb-6 relative z-10">
+      <h1 class="text-2xl font-bold tracking-[-0.03em] text-on-surface mb-2">Create an Account</h1>
+      <p class="text-on-surface-variant">Begin your journey to adaptive calm productivity.</p>
+    </div>
+
+    {% if error %}
+    <div class="bg-error-container/20 border border-error/30 text-on-error-container rounded-xl px-4 py-3 text-sm flex items-center gap-2 mb-4 relative z-10">
+      <span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">error</span>
+      {{ error }}
+    </div>
+    {% endif %}
+
+    <form action="/signup" method="POST" class="space-y-4 flex flex-col relative z-10">
+      <!-- Full Name Field -->
+      <div>
+        <label class="block text-sm font-semibold text-on-surface-variant mb-2 ml-1" for="fullName">Full Name</label>
+        <div class="relative">
+          <span class="material-symbols-outlined absolute left-3 top-1/2 transform -translate-y-1/2 text-on-surface-variant" style="font-size: 20px;">person</span>
+          <input id="fullName" name="username" class="w-full bg-surface-container-low border border-outline-variant rounded-lg py-3 pl-10 pr-4 text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:ring-0 input-glass focus:border-primary transition-all duration-300" placeholder="Jane Doe" type="text" required>
+        </div>
+      </div>
+      <!-- Email Field -->
+      <div>
+        <label class="block text-sm font-semibold text-on-surface-variant mb-2 ml-1" for="email">Email</label>
+        <div class="relative">
+          <span class="material-symbols-outlined absolute left-3 top-1/2 transform -translate-y-1/2 text-on-surface-variant" style="font-size: 20px;">mail</span>
+          <input id="email" name="email" class="w-full bg-surface-container-low border border-outline-variant rounded-lg py-3 pl-10 pr-4 text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:ring-0 input-glass focus:border-primary transition-all duration-300" placeholder="jane@student.edu" type="email" required>
+        </div>
+      </div>
+      <!-- Password Field -->
+      <div>
+        <label class="block text-sm font-semibold text-on-surface-variant mb-2 ml-1" for="password">Create Password</label>
+        <div class="relative">
+          <span class="material-symbols-outlined absolute left-3 top-1/2 transform -translate-y-1/2 text-on-surface-variant" style="font-size: 20px;">lock</span>
+          <input id="password" name="password" class="w-full bg-surface-container-low border border-outline-variant rounded-lg py-3 pl-10 pr-4 text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:ring-0 input-glass focus:border-primary transition-all duration-300" placeholder="••••••••" type="password" required>
+        </div>
+      </div>
+      <!-- Confirm Password Field -->
+      <div>
+        <label class="block text-sm font-semibold text-on-surface-variant mb-2 ml-1" for="confirm">Confirm Password</label>
+        <div class="relative">
+          <span class="material-symbols-outlined absolute left-3 top-1/2 transform -translate-y-1/2 text-on-surface-variant" style="font-size: 20px;">lock_reset</span>
+          <input id="confirm" name="confirm" class="w-full bg-surface-container-low border border-outline-variant rounded-lg py-3 pl-10 pr-4 text-on-surface placeholder-on-surface-variant/50 focus:outline-none focus:ring-0 input-glass focus:border-primary transition-all duration-300" placeholder="••••••••" type="password" required>
+        </div>
+      </div>
+      <!-- Terms and Privacy Checkbox -->
+      <div class="flex items-start mt-4 mb-2">
+        <div class="flex items-center h-5">
+          <input id="terms" type="checkbox" class="w-4 h-4 rounded border-outline-variant bg-surface-container-low text-primary focus:ring-primary focus:ring-offset-background cursor-pointer" required>
+        </div>
+        <div class="ml-3 text-sm">
+          <label class="text-[13px] text-on-surface-variant cursor-pointer" for="terms">
+            I agree to the <a href="#" class="text-primary hover:text-tertiary transition-colors underline decoration-primary/30 underline-offset-2">Terms of Service</a> and <a href="#" class="text-primary hover:text-tertiary transition-colors underline decoration-primary/30 underline-offset-2">Privacy Policy</a>.
+          </label>
+        </div>
+      </div>
+      <!-- Primary Action Button -->
+      <button class="w-full synora-gradient text-on-primary text-sm font-semibold rounded-lg py-3 mt-4 hover:opacity-90 transition-opacity flex items-center justify-center gap-2 group relative overflow-hidden" type="submit">
+        <span class="relative z-10">Create Account</span>
+        <span class="material-symbols-outlined relative z-10 group-hover:translate-x-1 transition-transform text-[18px]">arrow_forward</span>
+        <div class="absolute top-0 -inset-full h-full w-1/2 transform -skew-x-12 bg-gradient-to-r from-transparent to-white opacity-20 group-hover:translate-x-[300%] transition-transform duration-700"></div>
+      </button>
+    </form>
+
+    <!-- Login Link -->
+    <div class="mt-6 text-center relative z-10">
+      <p class="text-on-surface-variant">
+        Already have an account?
+        <a class="text-primary font-semibold hover:text-tertiary transition-colors ml-1" href="/login">Log in instead</a>
+      </p>
+    </div>
+  </div>
+</main>
+
+<footer class="text-on-surface-variant text-sm w-full flex flex-col items-center gap-3 pb-8 relative z-10">
+  <p>© 2026 Synora AI. Adaptive Calm Productivity.</p>
+</footer>
+</body>
+</html>

@@ -1,0 +1,286 @@
+{#
+  Synora — Global Sidebar Component.
+  Expected context: active_page (string), session.username
+  Includes: navigation, "Fix My Day" CTA, mobile command bar, global JS (dark mode + healing).
+#}
+{% set nav_items = [
+  ("dashboard", "Dashboard", "dashboard"),
+  ("calendar", "Calendar", "calendar_month"),
+  ("tasks", "Tasks", "assignment"),
+  ("quiz", "AI Quiz", "quiz"),
+  ("planner", "Planner", "auto_stories"),
+  ("focus", "Focus Mode", "target"),
+  ("settings", "Settings", "settings")
+] %}
+
+<!-- ==================== Desktop Sidebar ==================== -->
+<nav class="hidden md:flex flex-col h-screen w-64 fixed left-0 top-0 bg-surface-container-lowest/95 backdrop-blur-xl border-r border-white/5 shadow-lg shadow-black/20 z-50">
+  <!-- Header -->
+  <div class="px-5 py-6">
+    <a href="/dashboard" class="flex items-center mb-6 hover:opacity-85 transition-opacity">
+      <img src="/static/logo.png" alt="Synora AI Logo" class="h-9 w-auto object-contain">
+    </a>
+    <!-- Global CTA: Fix My Day -->
+    <button id="fixMyDayBtn" class="w-full synora-gradient text-on-primary font-label-md text-label-md rounded-xl py-3 px-4 flex items-center justify-center gap-2 hover:opacity-90 hover:scale-[1.02] active:scale-95 transition-all shadow-[0_0_20px_rgba(76,215,246,0.25)] disabled:opacity-60 disabled:cursor-wait">
+      <span class="material-symbols-outlined fix-spinner hidden" style="font-variation-settings: 'FILL' 1;">progress_activity</span>
+      <span class="material-symbols-outlined fix-icon" style="font-variation-settings: 'FILL' 1;">auto_fix_high</span>
+      <span class="fix-label">Fix My Day</span>
+    </button>
+  </div>
+
+  <!-- Main Navigation -->
+  <ul class="flex-1 flex flex-col gap-1 overflow-y-auto px-2">
+    {% for key, label, icon in nav_items %}
+    <li>
+      <a href="/{{ key }}" class="flex items-center gap-3 px-4 py-3 rounded-xl transition-all duration-300
+        {% if active_page == key %}
+          bg-primary-container text-on-primary-container shadow-[0_0_18px_rgba(41,95,72,0.4)]
+        {% else %}
+          text-on-surface-variant hover:bg-surface-container-high hover:text-on-surface
+        {% endif %}">
+        <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' {{ 1 if active_page == key else 0 }};">{{ icon }}</span>
+        <span>{{ label }}</span>
+      </a>
+    </li>
+    {% endfor %}
+  </ul>
+
+  <!-- Footer -->
+  <div class="mt-auto px-3 pb-5 space-y-3 border-t border-white/5 pt-4">
+    <div class="flex items-center justify-between px-2">
+      <span class="flex items-center gap-2 text-on-surface-variant text-sm font-semibold">
+        <span class="material-symbols-outlined text-[18px]">dark_mode</span> Dark Mode
+      </span>
+      <button role="switch" aria-checked="true" data-theme-toggle-btn class="relative w-11 h-6 rounded-full bg-surface-container-highest border border-white/10 transition-colors" style="--toggle-on:#295f48">
+        <span class="absolute top-[2px] left-[2px] w-5 h-5 rounded-full bg-primary shadow transition-transform duration-300"></span>
+      </button>
+    </div>
+    <a href="/logout" class="flex items-center gap-3 px-4 py-2 rounded-xl text-on-surface-variant hover:bg-error-container/20 hover:text-error transition-all">
+      <span class="material-symbols-outlined text-[18px]">logout</span>
+      <span class="text-sm font-semibold">Logout</span>
+    </a>
+  </div>
+</nav>
+
+<!-- ==================== Mobile Floating Command Bar ==================== -->
+<nav class="md:hidden fixed bottom-0 inset-x-0 z-50 bg-surface-container-lowest/90 backdrop-blur-2xl border-t border-white/10">
+  <div class="grid grid-cols-7">
+    {% for key, label, icon in nav_items %}
+    <a href="/{{ key }}" class="flex flex-col items-center gap-1 py-2.5
+      {% if active_page == key %}text-primary{% else %}text-on-surface-variant{% endif %}">
+      <span class="material-symbols-outlined text-[20px]" style="font-variation-settings: 'FILL' {{ 1 if active_page == key else 0 }};">{{ icon }}</span>
+      <span class="text-[9px] font-semibold">{{ label.split(' ')[0] }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</nav>
+
+<!-- Mobile spacer for the command bar -->
+<div class="md:hidden h-16"></div>
+
+<!-- ==================== Fix My Day Modal ==================== -->
+<div id="fixModal" class="hidden fixed inset-0 z-[100] flex items-center justify-center p-4">
+  <div id="fixBackdrop" class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+  <div class="relative w-full max-w-md glass-strong rounded-3xl p-6 shadow-2xl border border-white/10 overflow-hidden">
+    <div class="absolute -top-20 -right-20 w-48 h-48 bg-tertiary/10 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute -bottom-24 -left-20 w-48 h-48 bg-primary/10 rounded-full blur-3xl pointer-events-none"></div>
+
+    <div class="relative z-10">
+      <div class="flex items-center justify-between mb-1">
+        <h3 class="text-xl font-bold flex items-center gap-2">
+          <span class="material-symbols-outlined text-tertiary" style="font-variation-settings: 'FILL' 1;">auto_fix_high</span>
+          Fix My Day
+        </h3>
+        <button id="fixCloseBtn" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-white/10 hover:text-on-surface transition-all">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <p class="text-sm text-on-surface-variant mb-5">Tell Synora the truth — how much time slipped away, and how you're feeling. The AI will rebuild the most productive rest of your day.</p>
+
+      <!-- Step 1: Current Energy -->
+      <p class="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-2">1 · Current Energy Level</p>
+      <div id="fixEnergyOptions" class="grid grid-cols-3 gap-2 mb-5">
+        <button type="button" data-energy="Low Energy" class="fix-energy px-2 py-2.5 rounded-xl border border-white/10 text-on-surface-variant text-xs font-semibold transition-all flex flex-col items-center gap-1 hover:border-white/25 hover:bg-white/5">
+          <span class="text-lg">🌱</span> Low
+        </button>
+        <button type="button" data-energy="Active" class="fix-energy px-2 py-2.5 rounded-xl border border-white/10 text-on-surface-variant text-xs font-semibold transition-all flex flex-col items-center gap-1 hover:border-white/25 hover:bg-white/5">
+          <span class="text-lg">⚡</span> Active
+        </button>
+        <button type="button" data-energy="Peak Focus" class="fix-energy px-2 py-2.5 rounded-xl border border-white/10 text-on-surface-variant text-xs font-semibold transition-all flex flex-col items-center gap-1 hover:border-white/25 hover:bg-white/5">
+          <span class="text-lg">🔥</span> Peak
+        </button>
+      </div>
+
+      <!-- Step 2: Wasted Time -->
+      <p class="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-2">2 · Time wasted today?</p>
+      <div id="wasteChips" class="grid grid-cols-3 gap-2 mb-2">
+        <button type="button" data-minutes="15" class="waste-chip px-2 py-2 rounded-xl border border-white/10 text-on-surface-variant text-xs font-semibold transition-all hover:border-white/25 hover:bg-white/5">15 min</button>
+        <button type="button" data-minutes="30" class="waste-chip px-2 py-2 rounded-xl border border-white/10 text-on-surface-variant text-xs font-semibold transition-all hover:border-white/25 hover:bg-white/5">30 min</button>
+        <button type="button" data-minutes="60" class="waste-chip px-2 py-2 rounded-xl border border-white/10 text-on-surface-variant text-xs font-semibold transition-all hover:border-white/25 hover:bg-white/5">1 hour</button>
+        <button type="button" data-minutes="120" class="waste-chip px-2 py-2 rounded-xl border border-white/10 text-on-surface-variant text-xs font-semibold transition-all hover:border-white/25 hover:bg-white/5">2 hours</button>
+        <button type="button" data-minutes="180" class="waste-chip px-2 py-2 rounded-xl border border-white/10 text-on-surface-variant text-xs font-semibold transition-all hover:border-white/25 hover:bg-white/5">3 hours</button>
+        <button type="button" data-minutes="300" class="waste-chip px-2 py-2 rounded-xl border border-white/10 text-on-surface-variant text-xs font-semibold transition-all hover:border-white/25 hover:bg-white/5">5 hours</button>
+      </div>
+      <div class="flex items-center gap-2 mb-5">
+        <input id="wasteCustom" type="number" min="0" max="600" placeholder="or type minutes..." class="w-full bg-surface-container-low border border-white/5 rounded-xl px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:border-tertiary focus:ring-1 focus:ring-tertiary/50 transition-all placeholder:text-on-surface-variant/50">
+      </div>
+
+      <!-- Action -->
+      <button id="fixHealBtn" class="w-full synora-gradient text-on-primary text-sm font-bold rounded-xl py-3 flex items-center justify-center gap-2 hover:opacity-90 hover:scale-[1.01] active:scale-95 transition-all disabled:opacity-60 disabled:cursor-wait shadow-[0_0_20px_rgba(76,215,246,0.25)]">
+        <span class="material-symbols-outlined fix-spinner hidden" style="font-variation-settings: 'FILL' 1;">progress_activity</span>
+        <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">auto_fix_high</span>
+        <span class="fix-label">Heal My Day</span>
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Heal Toast -->
+<div id="healToast" class="hidden fixed bottom-24 md:bottom-8 left-1/2 -translate-x-1/2 z-[110] max-w-sm w-[calc(100%-2rem)] p-4 rounded-2xl border border-tertiary/30 bg-surface-container-low/95 backdrop-blur-xl shadow-[0_0_30px_rgba(76,215,246,0.15)]">
+  <div class="flex items-start gap-3">
+    <span class="material-symbols-outlined text-tertiary shrink-0 mt-0.5" style="font-variation-settings: 'FILL' 1;">auto_fix_high</span>
+    <p id="healToastText" class="text-sm text-on-surface leading-relaxed"></p>
+  </div>
+</div>
+
+<!-- ==================== Global JavaScript ==================== -->
+<script>
+(function () {
+  const THEME_KEY = "synora-theme";
+
+  /* ---------- Dark Mode ---------- */
+  function applyTheme(theme) {
+    const dark = theme === "dark";
+    document.documentElement.classList.toggle("dark", dark);
+    document.documentElement.style.colorScheme = dark ? "dark" : "light";
+  }
+
+  function syncToggles() {
+    const dark = document.documentElement.classList.contains("dark");
+    document.querySelectorAll("[data-theme-toggle-btn]").forEach(function (btn) {
+      const knob = btn.querySelector("span");
+      if (knob) {
+        knob.style.transform = dark ? "translateX(20px)" : "translateX(0)";
+        knob.classList.toggle("bg-primary", dark);
+        knob.classList.toggle("bg-on-surface-variant", !dark);
+      }
+      btn.style.backgroundColor = dark ? "#295f48" : "#c0c9c2";
+      btn.setAttribute("aria-checked", String(dark));
+    });
+  }
+
+  applyTheme(localStorage.getItem(THEME_KEY) || "dark");
+
+  document.addEventListener("DOMContentLoaded", function () {
+    syncToggles();
+    document.querySelectorAll("[data-theme-toggle-btn]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        const next = document.documentElement.classList.contains("dark") ? "light" : "dark";
+        applyTheme(next);
+        localStorage.setItem(THEME_KEY, next);
+        syncToggles();
+      });
+    });
+
+    /* ---------- Fix My Day (AI healing modal) ---------- */
+    var fixBtn = document.getElementById("fixMyDayBtn");
+    var fixModal = document.getElementById("fixModal");
+    if (fixBtn && fixModal) {
+      var fixEnergy = "Active";
+      var wasteMinutes = 0;
+
+      function openFixModal() {
+        fixModal.classList.remove("hidden");
+        fetch("/api/energy").then(function (r) { return r.json(); }).then(function (d) {
+          paintFixEnergy(d.current_energy || "Active");
+        }).catch(function () { paintFixEnergy("Active"); });
+      }
+      function closeFixModal() {
+        fixModal.classList.add("hidden");
+      }
+      function paintFixEnergy(level) {
+        fixEnergy = level;
+        document.querySelectorAll(".fix-energy").forEach(function (b) {
+          var on = b.dataset.energy === level;
+          b.classList.toggle("bg-primary", on);
+          b.classList.toggle("text-on-primary", on);
+          b.classList.toggle("border-primary", on);
+          b.classList.toggle("shadow-[0_0_14px_rgba(154,211,182,0.35)]", on);
+          b.classList.toggle("border-white/10", !on);
+          b.classList.toggle("text-on-surface-variant", !on);
+        });
+      }
+      function paintWaste(minutes) {
+        wasteMinutes = minutes;
+        document.querySelectorAll(".waste-chip").forEach(function (c) {
+          var on = Number(c.dataset.minutes) === minutes;
+          c.classList.toggle("bg-tertiary", on);
+          c.classList.toggle("text-on-tertiary", on);
+          c.classList.toggle("border-tertiary", on);
+          c.classList.toggle("shadow-[0_0_14px_rgba(76,215,246,0.35)]", on);
+          c.classList.toggle("border-white/10", !on);
+          c.classList.toggle("text-on-surface-variant", !on);
+        });
+      }
+
+      fixBtn.addEventListener("click", openFixModal);
+      document.getElementById("fixCloseBtn").addEventListener("click", closeFixModal);
+      document.getElementById("fixBackdrop").addEventListener("click", closeFixModal);
+      document.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && !fixModal.classList.contains("hidden")) closeFixModal();
+      });
+
+      document.querySelectorAll(".fix-energy").forEach(function (b) {
+        b.addEventListener("click", function () { paintFixEnergy(b.dataset.energy); });
+      });
+      document.querySelectorAll(".waste-chip").forEach(function (c) {
+        c.addEventListener("click", function () {
+          document.getElementById("wasteCustom").value = "";
+          paintWaste(Number(c.dataset.minutes));
+        });
+      });
+      var wasteCustom = document.getElementById("wasteCustom");
+      wasteCustom.addEventListener("input", function () {
+        paintWaste(Number(wasteCustom.value) || 0);
+      });
+
+      document.getElementById("fixHealBtn").addEventListener("click", function () {
+        var btn = this;
+        var spinner = btn.querySelector(".fix-spinner");
+        var label = btn.querySelector(".fix-label");
+        btn.disabled = true;
+        spinner.classList.remove("hidden");
+        label.textContent = "Healing...";
+        closeFixModal();
+        fetch("/api/reschedule", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ current_energy: fixEnergy, wasted_minutes: wasteMinutes })
+        }).then(function (res) { return res.json(); }).then(function (data) {
+          /* Taunt lands on the dashboard welcome tip */
+          var tip = document.getElementById("welcomeTip");
+          if (tip) {
+            if (data.taunt) {
+              tip.textContent = data.taunt;
+              tip.classList.add("italic", "text-tertiary", "font-semibold");
+            }
+            var toast = document.getElementById("healToast");
+            document.getElementById("healToastText").textContent = data.message || "Schedule healed!";
+            toast.classList.remove("hidden");
+            setTimeout(function () { toast.classList.add("hidden"); }, 5000);
+            if (typeof loadTasks === "function") loadTasks();
+          } else {
+            window.location.href = "/dashboard";
+          }
+        }).catch(function () {
+          window.location.href = "/dashboard";
+        }).finally(function () {
+          btn.disabled = false;
+          spinner.classList.add("hidden");
+          label.textContent = "Heal My Day";
+        });
+      });
+    }
+  });
+})();
+</script>

@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  {% include "head.html" %}
+</head>
+<body class="bg-background text-on-surface antialiased min-h-screen selection:bg-primary-container selection:text-on-primary-container">
+<div class="ambient-bg"></div>
+{% include "sidebar.html" %}
+
+<div class="md:ml-64 min-h-screen flex flex-col relative">
+  <header class="flex justify-between items-center px-6 py-4 bg-surface/40 backdrop-blur-md sticky top-0 z-40 border-b border-white/5">
+    <div class="flex items-center gap-4">
+      <span class="text-xl font-semibold text-on-surface">Dashboard</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <button class="text-on-surface-variant hover:bg-white/5 rounded-full p-2 transition-all relative" title="Notifications">
+        <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">notifications</span>
+        <span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full"></span>
+      </button>
+      <div class="w-9 h-9 rounded-full synora-gradient flex items-center justify-center text-on-primary font-bold ml-2 shadow-[0_0_16px_rgba(154,211,182,0.35)]">
+        {{ session.username[0]|upper }}
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 p-5 md:p-10 max-w-7xl mx-auto w-full pb-16">
+    <!-- Welcome Header -->
+    <section id="welcomeSection" style="opacity:0; transform: translateY(20px); transition: opacity 0.8s ease-out, transform 0.8s ease-out;">
+      <h2 class="text-[32px] md:text-[40px] font-bold tracking-[-0.03em] text-on-surface mb-3">Welcome back, {{ session.username }} 👋</h2>
+      <div class="flex items-start md:items-center gap-3 text-on-surface-variant bg-surface-container-low/50 p-4 rounded-2xl border border-white/5 backdrop-blur-sm max-w-2xl">
+        <span class="material-symbols-outlined text-tertiary animate-pulse" style="font-variation-settings: 'FILL' 1;">psychology</span>
+        <p id="welcomeTip" class="m-0 {% if last_taunt %}italic text-tertiary font-semibold{% endif %}">{% if last_taunt %}{{ last_taunt }}{% else %}Add your first task with Quick Add and Synora will place it where your energy fits best. Whenever life shifts, hit <span class="text-primary font-semibold">Fix My Day</span> and the AI will heal your entire plan.{% endif %}</p>
+      </div>
+    </section>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mt-8">
+      <!-- Left: Today's Flow -->
+      <div class="lg:col-span-2 flex flex-col gap-3">
+        <div class="flex items-center justify-between mb-2">
+          <h3 class="text-2xl font-bold tracking-[-0.03em]">Today's Flow</h3>
+          <a href="/tasks" class="text-primary hover:text-primary-fixed transition-colors text-sm font-semibold flex items-center gap-1">
+            View All <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+          </a>
+        </div>
+        <div id="taskList" class="space-y-3">
+          <div class="glass-panel rounded-2xl p-6 text-center text-on-surface-variant text-sm">
+            <span class="material-symbols-outlined animate-spin inline-block">progress_activity</span>
+            <p class="mt-2">Loading your flow...</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Right Column: Widgets -->
+      <div class="flex flex-col gap-6">
+        <!-- Streak Widget -->
+        <div class="bg-surface/60 backdrop-blur-xl border border-white/10 rounded-2xl p-5 relative overflow-hidden">
+          <div class="absolute -top-10 -right-10 w-32 h-32 bg-gradient-to-br from-orange-400/20 to-red-500/20 rounded-full blur-2xl pointer-events-none"></div>
+          <div class="flex items-center justify-between mb-3 relative z-10">
+            <h3 class="text-sm font-bold flex items-center gap-2">
+              <span class="w-7 h-7 rounded-full bg-gradient-to-br from-orange-400 to-red-500 flex items-center justify-center text-white text-xs shadow-[0_0_12px_rgba(251,146,60,0.5)]">🔥</span>
+              Streak
+            </h3>
+            <span id="streakCount" class="text-xl font-extrabold text-primary flex items-center gap-1">0 <span class="text-sm">🔥</span></span>
+          </div>
+          <div id="streakDays" class="flex gap-1.5 justify-between mb-2 relative z-10">
+            <span class="text-xs text-on-surface-variant">Loading...</span>
+          </div>
+          <p id="streakMsg" class="text-xs text-on-surface-variant leading-relaxed relative z-10">Complete a task or focus session to start your streak!</p>
+          <div class="flex items-center gap-3 mt-2 text-[11px] text-on-surface-variant relative z-10">
+            <span>Best: <span id="streakBest" class="font-bold text-on-surface">0</span></span>
+            <span>•</span>
+            <span>Total: <span id="streakTotal" class="font-bold text-on-surface">0</span> days</span>
+          </div>
+        </div>
+
+        <!-- Energy Widget (dynamic) -->
+        <div class="bg-surface/60 backdrop-blur-xl border border-white/10 rounded-2xl p-6 relative overflow-hidden">
+          <div class="flex items-center justify-between mb-1">
+            <h3 class="text-lg font-semibold">Predicted Energy</h3>
+            <span id="energyNowBadge" class="text-[10px] font-bold px-2 py-1 rounded-full border bg-surface-container-high border-white/5 text-on-surface-variant">—</span>
+          </div>
+          <p id="energyNowHint" class="text-xs text-on-surface-variant mb-3">AI forecast for today</p>
+          <div id="energyChart" class="h-32 w-full flex items-end justify-between gap-1.5 mt-2 relative z-10">
+            <span class="text-xs text-on-surface-variant w-full text-center">Loading forecast...</span>
+          </div>
+          <div class="flex justify-between mt-3 text-[11px] text-on-surface-variant font-semibold">
+            <span>8AM</span><span>10AM</span><span>12PM</span><span>2PM</span><span>4PM</span><span>6PM</span>
+          </div>
+          <div class="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-surface/80 to-transparent pointer-events-none"></div>
+        </div>
+
+        <!-- AI Quiz Card -->
+        <div class="bg-primary-container/10 backdrop-blur-xl border border-primary/20 rounded-2xl p-6 relative overflow-hidden group hover:border-primary/40 transition-all">
+          <div class="absolute top-0 right-0 w-24 h-24 bg-tertiary/10 rounded-full blur-[20px] -mr-8 -mt-8 pointer-events-none"></div>
+          <div class="relative z-10">
+            <div class="flex items-center gap-2 mb-2">
+              <span class="material-symbols-outlined text-primary" style="font-variation-settings: 'FILL' 1;">psychology</span>
+              <h3 class="text-lg font-semibold">AI Quiz</h3>
+            </div>
+            <p class="text-sm text-on-surface-variant mb-4">Personalized Mastery: Test your knowledge and let Synora bridge your study gaps.</p>
+            <a href="/quiz" class="w-full py-2.5 px-4 bg-primary text-on-primary text-sm font-semibold rounded-xl hover:opacity-90 hover:scale-[1.02] transition-all flex items-center justify-center gap-2">
+              <span class="material-symbols-outlined text-[18px]">play_arrow</span>
+              Start Quiz
+            </a>
+          </div>
+        </div>
+
+        <!-- Quick Add -->
+        <div class="bg-surface/60 backdrop-blur-xl border border-white/10 rounded-2xl p-6">
+          <h3 class="text-lg font-semibold mb-4">Quick Add</h3>
+          <form id="quickAddForm" class="flex flex-col gap-3">
+            <div class="relative group">
+              <input id="quickAddInput" class="w-full bg-surface-container-low border border-white/5 rounded-xl px-4 py-3 text-on-surface focus:outline-none focus:border-tertiary focus:ring-1 focus:ring-tertiary/50 transition-all placeholder:text-on-surface-variant/50" placeholder="E.g., Revise Physics Notes..." type="text" autocomplete="off">
+              <button type="submit" class="absolute right-2 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center text-on-surface-variant hover:text-primary transition-colors">
+                <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">add_circle</span>
+              </button>
+            </div>
+
+            <!-- Time Range (revealed after typing a task name) -->
+            <div id="timeRow" class="hidden grid grid-cols-2 gap-3 pt-1">
+              <div>
+                <label for="quickFrom" class="block text-xs font-semibold text-on-surface-variant mb-1.5 ml-1">🕐 From</label>
+                <input id="quickFrom" type="time" value="09:00" class="w-full bg-surface-container-low border border-white/5 rounded-xl px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:border-tertiary focus:ring-1 focus:ring-tertiary/50 transition-all">
+              </div>
+              <div>
+                <label for="quickTo" class="block text-xs font-semibold text-on-surface-variant mb-1.5 ml-1">🕑 To</label>
+                <input id="quickTo" type="time" value="10:00" class="w-full bg-surface-container-low border border-white/5 rounded-xl px-3 py-2.5 text-sm text-on-surface focus:outline-none focus:border-tertiary focus:ring-1 focus:ring-tertiary/50 transition-all">
+              </div>
+            </div>
+
+            <!-- Task Type -->
+            <div id="typeRow" class="hidden pt-1">
+              <p class="text-xs font-semibold text-on-surface-variant mb-1.5 ml-1">Task Type</p>
+              <div class="flex flex-col gap-2">
+                <button type="button" data-quick-priority="P3" class="quick-prio w-full px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all flex items-center gap-2 bg-primary/5 border-primary/20 text-primary hover:bg-primary/15">
+                  <span class="text-sm">🟢</span> Quick Win
+                </button>
+                <button type="button" data-quick-priority="P2" class="quick-prio w-full px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all flex items-center gap-2 bg-primary/5 border-primary/20 text-primary hover:bg-primary/15">
+                  <span class="text-sm">🟡</span> Focus Task
+                </button>
+                <button type="button" data-quick-priority="P1" class="quick-prio w-full px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all flex items-center gap-2 bg-primary/5 border-primary/20 text-primary hover:bg-primary/15">
+                  <span class="text-sm">🔴</span> Power Task
+                </button>
+              </div>
+              <button type="submit" class="w-full mt-3 py-2.5 synora-gradient text-on-primary text-sm font-bold rounded-xl hover:opacity-90 hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center gap-2">
+                <span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">add_task</span>
+                Add to Today's Flow
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- Floating Healing FAB -->
+<button id="fabAdd" class="fixed bottom-6 right-6 w-14 h-14 rounded-full synora-gradient text-on-primary shadow-[0_0_24px_rgba(76,215,246,0.35)] flex items-center justify-center hover:scale-105 active:scale-95 transition-all z-50" title="Quick Add Task">
+  <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">add</span>
+</button>
+
+<script>
+var quickPriority = "P2";
+
+function fmtTime(hm) { return hm; }
+
+function taskCardHTML(t) {
+  var energyColor = t.energy === "High" ? "bg-error-container/20 text-error border-error/20"
+    : t.energy === "Low" ? "bg-secondary-container/20 text-secondary border-secondary/20"
+    : "bg-primary-container/20 text-primary border-primary/20";
+  var energyIcon = t.energy === "High" ? "bolt" : t.energy === "Low" ? "battery_0_bar" : "battery_charging_50";
+  var healed = t.healed
+    ? ' <span class="material-symbols-outlined text-tertiary text-[16px] healing-glow rounded-full" title="Rescheduled by AI">auto_fix_normal</span>'
+    : "";
+  var priorityLabel = t.priority === "P1" ? "🔴 Power Task" : t.priority === "P3" ? "🟢 Quick Win" : "🟡 Focus Task";
+  return '<div class="bg-surface/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-white/20 hover:scale-[1.01] transition-all group">'
+    + '<div class="flex items-start sm:items-center gap-4">'
+    + '<button onclick="toggleTask(\'' + t.id + '\')" class="w-6 h-6 rounded-full border-2 shrink-0 mt-1 sm:mt-0 flex items-center justify-center transition-colors ' + (t.completed ? "bg-primary border-primary" : "border-outline-variant group-hover:border-primary") + '">'
+    + (t.completed ? '<span class="material-symbols-outlined text-on-primary text-[14px]" style="font-variation-settings:\'FILL\' 1;">check</span>' : "")
+    + '</button>'
+    + '<div>'
+    + '<div class="flex items-center gap-2">'
+    + '<h4 class="text-sm font-semibold ' + (t.completed ? "line-through opacity-50" : "text-on-surface") + '">' + t.name + '</h4>' + healed
+    + '</div>'
+    + '<div class="flex items-center gap-2 mt-1 text-on-surface-variant text-sm">'
+    + '<span class="material-symbols-outlined text-[16px]">schedule</span>'
+    + '<span>' + fmtTime(t.start_time) + ' - ' + fmtTime(t.end_time) + '</span>'
+    + '</div></div></div>'
+    + '<div class="flex items-center gap-2 self-start sm:self-auto ml-10 sm:ml-0">'
+    + '<span class="px-2 py-1 rounded-full text-xs font-semibold flex items-center gap-1 border ' + energyColor + '">'
+    + '<span class="material-symbols-outlined text-[14px]">' + energyIcon + '</span> ' + t.energy + ' Energy</span>'
+    + '<span class="px-2 py-1 bg-surface-container-high text-on-surface rounded-full text-xs font-semibold border border-white/5">' + priorityLabel + '</span>'
+    + '</div></div>';
+}
+
+async function loadTasks() {
+  try {
+    var res = await fetch("/api/tasks");
+    var data = await res.json();
+    var today = new Date().toISOString().slice(0,10);
+    var tasks = (data.tasks || []).filter(function(t){ return !t.date || t.date === today; });
+    var list = document.getElementById("taskList");
+    if (!tasks.length) {
+      list.innerHTML = '<div class="glass-panel rounded-2xl p-8 text-center text-on-surface-variant"><span class="material-symbols-outlined text-[40px] text-primary">self_improvement</span><p class="mt-2">Your day is clear. Add a task to begin.</p></div>';
+      return;
+    }
+    list.innerHTML = tasks.map(taskCardHTML).join("");
+  } catch (e) {
+    document.getElementById("taskList").innerHTML = '<div class="glass-panel rounded-2xl p-6 text-center text-error">Failed to load tasks.</div>';
+  }
+}
+
+async function toggleTask(id) {
+  await fetch("/api/tasks/" + id + "/complete", { method: "POST" });
+  loadTasks();
+  loadStreak();
+  loadPredictedEnergy();
+}
+
+async function loadStreak() {
+  try {
+    var res = await fetch("/api/streak");
+    var d = await res.json();
+    document.getElementById("streakCount").innerHTML = d.current_streak + ' <span class="text-sm">🔥</span>';
+    document.getElementById("streakBest").textContent = d.best_streak;
+    document.getElementById("streakTotal").textContent = d.total_active;
+    var wrap = document.getElementById("streakDays");
+    wrap.innerHTML = d.last7.map(function (day) {
+      var active = day.active;
+      var bg = active
+        ? "bg-gradient-to-br from-orange-400 to-red-500 text-white shadow-[0_0_8px_rgba(251,146,60,0.5)] border-orange-400"
+        : "bg-surface-container-high text-on-surface-variant border-white/5";
+      return '<div class="flex flex-col items-center gap-1 flex-1">'
+        + '<div class="w-8 h-8 rounded-full flex items-center justify-center text-[11px] font-bold border ' + bg + '">' + (active ? "✓" : day.label) + '</div>'
+        + '<span class="text-[10px] text-on-surface-variant">' + day.date.slice(5) + '</span>'
+        + '</div>';
+    }).join("");
+    var msg = document.getElementById("streakMsg");
+    if (d.current_streak === 0) msg.textContent = "Complete a task or focus session today to start your streak!";
+    else if (d.current_streak === 1) msg.textContent = "Great start! Come back tomorrow to keep it alive.";
+    else msg.textContent = d.current_streak + " days strong! Keep the momentum.";
+  } catch (e) {}
+}
+
+async function loadPredictedEnergy() {
+  try {
+    var res = await fetch("/api/predicted-energy");
+    var d = await res.json();
+    var chart = document.getElementById("energyChart");
+    var badge = document.getElementById("energyNowBadge");
+    var hint = document.getElementById("energyNowHint");
+    badge.textContent = d.current_energy;
+    badge.className = "text-[10px] font-bold px-2 py-1 rounded-full border " + (
+      d.current_energy === "Peak Focus" ? "bg-error/20 text-error border-error/30" :
+      d.current_energy === "Low Energy" ? "bg-secondary-container/30 text-secondary border-secondary/20" :
+      "bg-tertiary/20 text-tertiary border-tertiary/30"
+    );
+    hint.textContent = d.current_energy === "Peak Focus" ? "High focus window ahead" :
+      d.current_energy === "Low Energy" ? "Gentle pace recommended" : "Balanced day ahead";
+    chart.innerHTML = d.hours.map(function (h) {
+      var v = h.value;
+      var color = v >= 70 ? "bg-primary/80 shadow-[0_0_12px_rgba(154,211,182,0.5)]"
+        : v >= 50 ? "bg-tertiary/70 shadow-[0_0_10px_rgba(76,215,246,0.4)]"
+        : v >= 35 ? "bg-secondary/50"
+        : "bg-error/40";
+      var cls = "flex-1 rounded-t-md hover:brightness-110 transition-all duration-500 " + color;
+      return '<div class="' + cls + '" style="height:' + v + '%" title="' + h.label + ': ' + v + '%"></div>';
+    }).join("");
+  } catch (e) {}
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  var ws = document.getElementById("welcomeSection");
+  setTimeout(function () { ws.style.opacity = "1"; ws.style.transform = "translateY(0)"; }, 100);
+
+  loadTasks();
+  loadStreak();
+  loadPredictedEnergy();
+
+  /* Reveal time + task-type steps once a name is typed */
+  var quickInput = document.getElementById("quickAddInput");
+  var timeRow = document.getElementById("timeRow");
+  var typeRow = document.getElementById("typeRow");
+
+  function syncQuickSteps() {
+    var hasName = quickInput.value.trim().length > 0;
+    timeRow.classList.toggle("hidden", !hasName);
+    timeRow.classList.toggle("grid", hasName);
+    typeRow.classList.toggle("hidden", !hasName);
+  }
+  quickInput.addEventListener("input", syncQuickSteps);
+
+  /* Task type chips: Quick Win / Focus Task / Power Task */
+  document.querySelectorAll(".quick-prio").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      quickPriority = btn.dataset.quickPriority;
+      document.querySelectorAll(".quick-prio").forEach(function (b) {
+        if (b === btn) {
+          b.classList.add("bg-primary", "text-on-primary", "border-primary", "shadow-[0_0_14px_rgba(154,211,182,0.35)]");
+          b.classList.remove("bg-primary/5", "text-primary", "border-primary/20");
+        } else {
+          b.classList.remove("bg-primary", "text-on-primary", "border-primary", "shadow-[0_0_14px_rgba(154,211,182,0.35)]");
+          b.classList.add("bg-primary/5", "text-primary", "border-primary/20");
+        }
+      });
+    });
+  });
+
+  function quickAdd() {
+    var input = document.getElementById("quickAddInput");
+    var name = input.value.trim();
+    if (!name) {
+      input.focus();
+      return;
+    }
+    fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name,
+        start_time: document.getElementById("quickFrom").value,
+        end_time: document.getElementById("quickTo").value,
+        energy: "Med",
+        priority: quickPriority
+      })
+    }).then(function (res) { return res.json(); }).then(function () {
+      input.value = "";
+      syncQuickSteps();
+      loadTasks();
+      loadStreak();
+      loadPredictedEnergy();
+    });
+  }
+
+  document.getElementById("quickAddForm").addEventListener("submit", function (e) { e.preventDefault(); quickAdd(); });
+  document.getElementById("fabAdd").addEventListener("click", function () {
+    var input = document.getElementById("quickAddInput");
+    if (!input.value.trim()) {
+      input.focus();
+      input.scrollIntoView({ behavior: "smooth", block: "center" });
+    } else {
+      quickAdd();
+    }
+  });
+});
+</script>
+</body>
+</html>

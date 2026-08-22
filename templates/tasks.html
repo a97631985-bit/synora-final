@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  {% include "head.html" %}
+</head>
+<body class="bg-background text-on-surface antialiased min-h-screen selection:bg-primary-container selection:text-on-primary-container">
+<div class="ambient-bg"></div>
+{% include "sidebar.html" %}
+
+<div class="md:ml-64 min-h-screen flex flex-col relative">
+  <header class="flex justify-between items-center px-6 py-4 bg-surface/40 backdrop-blur-md sticky top-0 z-40 border-b border-white/5">
+    <span class="text-xl font-semibold text-on-surface">Tasks</span>
+    <div class="flex items-center gap-2">
+      <button id="addTaskBtn" class="bg-primary-container text-on-primary-container text-sm font-semibold px-5 py-2 rounded-full hover:bg-inverse-primary hover:text-primary-fixed transition-all active:scale-95 flex items-center gap-2 glow-effect">
+        <span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">add</span>
+        New Task
+      </button>
+    </div>
+  </header>
+
+  <main class="flex-1 p-5 md:p-10 max-w-7xl mx-auto w-full pb-16">
+    <!-- Stats Row -->
+    <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8" id="statsRow">
+      <div class="glass-panel rounded-2xl p-5 flex items-center gap-4">
+        <div class="w-11 h-11 rounded-xl bg-primary-container/30 flex items-center justify-center text-primary">
+          <span class="material-symbols-outlined">assignment</span>
+        </div>
+        <div><p class="text-2xl font-bold" id="statTotal">0</p><p class="text-sm text-on-surface-variant">Total Tasks</p></div>
+      </div>
+      <div class="glass-panel rounded-2xl p-5 flex items-center gap-4">
+        <div class="w-11 h-11 rounded-xl bg-tertiary-container/30 flex items-center justify-center text-tertiary">
+          <span class="material-symbols-outlined">check_circle</span>
+        </div>
+        <div><p class="text-2xl font-bold" id="statDone">0</p><p class="text-sm text-on-surface-variant">Completed</p></div>
+      </div>
+      <div class="glass-panel rounded-2xl p-5 flex items-center gap-4">
+        <div class="w-11 h-11 rounded-xl bg-secondary-container/30 flex items-center justify-center text-secondary">
+          <span class="material-symbols-outlined">auto_fix_high</span>
+        </div>
+        <div><p class="text-2xl font-bold" id="statHealed">0</p><p class="text-sm text-on-surface-variant">AI-Healed</p></div>
+      </div>
+    </div>
+
+    <!-- Filter Chips -->
+    <div class="flex flex-wrap gap-2 mb-6">
+      <button data-filter="all" class="filter-chip px-4 py-2 rounded-full text-sm font-semibold transition-all bg-primary-container text-on-primary-container">All</button>
+      <button data-filter="pending" class="filter-chip px-4 py-2 rounded-full text-sm font-semibold transition-all bg-surface-container border border-white/5 text-on-surface-variant hover:text-on-surface">Pending</button>
+      <button data-filter="done" class="filter-chip px-4 py-2 rounded-full text-sm font-semibold transition-all bg-surface-container border border-white/5 text-on-surface-variant hover:text-on-surface">Completed</button>
+      <button data-filter="healed" class="filter-chip px-4 py-2 rounded-full text-sm font-semibold transition-all bg-surface-container border border-white/5 text-on-surface-variant hover:text-on-surface">AI-Healed</button>
+    </div>
+
+    <!-- Task List -->
+    <div id="taskList" class="space-y-3">
+      <div class="glass-panel rounded-2xl p-6 text-center text-on-surface-variant text-sm">
+        <span class="material-symbols-outlined animate-spin inline-block">progress_activity</span>
+        <p class="mt-2">Loading tasks...</p>
+      </div>
+    </div>
+  </main>
+</div>
+
+<!-- New Task Modal -->
+<div id="taskModal" class="fixed inset-0 z-50 hidden items-center justify-center p-5">
+  <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeModal()"></div>
+  <div class="relative glass-strong rounded-3xl p-8 w-full max-w-md shadow-2xl">
+    <div class="flex items-center justify-between mb-6">
+      <h3 class="text-lg font-bold">Add a New Task</h3>
+      <button onclick="closeModal()" class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <form id="taskForm" class="flex flex-col gap-4">
+      <div>
+        <label class="text-sm font-semibold text-on-surface-variant mb-1 block">Task Name</label>
+        <input id="tName" class="w-full input-glass text-on-surface rounded-xl px-4 py-3 placeholder-outline-variant" placeholder="E.g., Revise Quantum Mechanics" required>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="text-sm font-semibold text-on-surface-variant mb-1 block">Start Time</label>
+          <input id="tStart" type="time" class="w-full input-glass text-on-surface rounded-xl px-4 py-3" value="09:00">
+        </div>
+        <div>
+          <label class="text-sm font-semibold text-on-surface-variant mb-1 block">End Time</label>
+          <input id="tEnd" type="time" class="w-full input-glass text-on-surface rounded-xl px-4 py-3" value="10:00">
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="text-sm font-semibold text-on-surface-variant mb-1 block">Energy Level</label>
+          <select id="tEnergy" class="w-full input-glass text-on-surface rounded-xl px-4 py-3 cursor-pointer">
+            <option class="bg-surface text-on-surface" value="High">High Energy</option>
+            <option class="bg-surface text-on-surface" value="Med" selected>Med Energy</option>
+            <option class="bg-surface text-on-surface" value="Low">Low Energy</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-sm font-semibold text-on-surface-variant mb-1 block">Priority</label>
+          <select id="tPriority" class="w-full input-glass text-on-surface rounded-xl px-4 py-3 cursor-pointer">
+            <option class="bg-surface text-on-surface" value="P1">P1 — Urgent</option>
+            <option class="bg-surface text-on-surface" value="P2" selected>P2 — Deep Work</option>
+            <option class="bg-surface text-on-surface" value="P3">P3 — Errand</option>
+          </select>
+        </div>
+      </div>
+      <button type="submit" class="synora-gradient text-on-primary font-semibold rounded-xl py-3 mt-2 hover:opacity-90 hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center gap-2">
+        <span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">add_task</span>
+        Add to Schedule
+      </button>
+    </form>
+  </div>
+</div>
+
+<script>
+var allTasks = [];
+var filter = "all";
+
+function closeModal() {
+  var m = document.getElementById("taskModal");
+  m.classList.add("hidden"); m.classList.remove("flex");
+}
+function openModal() {
+  var m = document.getElementById("taskModal");
+  m.classList.remove("hidden"); m.classList.add("flex");
+}
+
+function energyStyle(t) {
+  if (t.energy === "High") return "bg-error-container/20 text-error border-error/20";
+  if (t.energy === "Low") return "bg-secondary-container/20 text-secondary border-secondary/20";
+  return "bg-primary-container/20 text-primary border-primary/20";
+}
+function energyIcon(t) {
+  if (t.energy === "High") return "bolt";
+  if (t.energy === "Low") return "battery_0_bar";
+  return "battery_charging_50";
+}
+
+function taskRowHTML(t) {
+  var healBadge = t.healed
+    ? '<span class="px-2 py-1 bg-tertiary-container/20 text-tertiary rounded-full text-xs font-semibold flex items-center gap-1 border border-tertiary/20"><span class="material-symbols-outlined text-[14px]">auto_fix_normal</span> Healed</span>'
+    : "";
+  return '<div class="bg-surface/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-white/20 hover:scale-[1.005] transition-all group">'
+    + '<div class="flex items-start sm:items-center gap-4">'
+    + '<button onclick="toggleTask(\'' + t.id + '\')" class="w-6 h-6 rounded-full border-2 shrink-0 mt-1 sm:mt-0 flex items-center justify-center transition-colors ' + (t.completed ? "bg-primary border-primary" : "border-outline-variant group-hover:border-primary") + '">'
+    + (t.completed ? '<span class="material-symbols-outlined text-on-primary text-[14px]" style="font-variation-settings:\'FILL\' 1;">check</span>' : "")
+    + '</button>'
+    + '<div><h4 class="text-sm font-semibold ' + (t.completed ? "line-through opacity-50" : "text-on-surface") + '">' + t.name + '</h4>'
+    + '<div class="flex items-center gap-2 mt-1 text-on-surface-variant text-sm"><span class="material-symbols-outlined text-[16px]">schedule</span><span>' + t.start_time + ' - ' + t.end_time + '</span></div></div></div>'
+    + '<div class="flex items-center gap-2 self-start sm:self-auto ml-10 sm:ml-0 flex-wrap">'
+    + '<span class="px-2 py-1 rounded-full text-xs font-semibold flex items-center gap-1 border ' + energyStyle(t) + '"><span class="material-symbols-outlined text-[14px]">' + energyIcon(t) + '</span> ' + t.energy + '</span>'
+    + '<span class="px-2 py-1 bg-surface-container-high text-on-surface rounded-full text-xs font-semibold border border-white/5">' + t.priority + '</span>'
+    + healBadge
+    + '<button onclick="deleteTask(\'' + t.id + '\')" class="w-8 h-8 rounded-full bg-surface-container-high text-on-surface-variant hover:bg-error-container/20 hover:text-error flex items-center justify-center transition-all" title="Delete"><span class="material-symbols-outlined text-[18px]">delete</span></button>'
+    + '</div></div>';
+}
+
+function render() {
+  var list = document.getElementById("taskList");
+  var shown = allTasks.filter(function (t) {
+    if (filter === "pending") return !t.completed;
+    if (filter === "done") return t.completed;
+    if (filter === "healed") return t.healed;
+    return true;
+  });
+  if (!shown.length) {
+    list.innerHTML = '<div class="glass-panel rounded-2xl p-8 text-center text-on-surface-variant"><span class="material-symbols-outlined text-[40px] text-primary">inbox</span><p class="mt-2">No tasks here yet.</p></div>';
+    return;
+  }
+  list.innerHTML = shown.map(taskRowHTML).join("");
+  document.getElementById("statTotal").textContent = allTasks.length;
+  document.getElementById("statDone").textContent = allTasks.filter(function (t) { return t.completed; }).length;
+  document.getElementById("statHealed").textContent = allTasks.filter(function (t) { return t.healed; }).length;
+}
+
+async function loadTasks() {
+  try {
+    var res = await fetch("/api/tasks");
+    var data = await res.json();
+    allTasks = data.tasks;
+    render();
+  } catch (e) {
+    document.getElementById("taskList").innerHTML = '<div class="glass-panel rounded-2xl p-6 text-center text-error">Failed to load tasks.</div>';
+  }
+}
+
+async function toggleTask(id) {
+  await fetch("/api/tasks/" + id + "/complete", { method: "POST" });
+  loadTasks();
+}
+
+async function deleteTask(id) {
+  if (!confirm("Delete this task?")) return;
+  await fetch("/api/tasks/" + id, { method: "DELETE" });
+  loadTasks();
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  loadTasks();
+  document.getElementById("addTaskBtn").addEventListener("click", openModal);
+  document.querySelectorAll(".filter-chip").forEach(function (chip) {
+    chip.addEventListener("click", function () {
+      filter = chip.dataset.filter;
+      document.querySelectorAll(".filter-chip").forEach(function (c) {
+        if (c === chip) {
+          c.classList.add("bg-primary-container", "text-on-primary-container");
+          c.classList.remove("bg-surface-container", "text-on-surface-variant", "border", "border-white/5");
+        } else {
+          c.classList.remove("bg-primary-container", "text-on-primary-container");
+          c.classList.add("bg-surface-container", "text-on-surface-variant", "border", "border-white/5");
+        }
+      });
+      render();
+    });
+  });
+  document.getElementById("taskForm").addEventListener("submit", async function (e) {
+    e.preventDefault();
+    var name = document.getElementById("tName").value.trim();
+    if (!name) return;
+    await fetch("/api/tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: name,
+        start_time: document.getElementById("tStart").value,
+        end_time: document.getElementById("tEnd").value,
+        energy: document.getElementById("tEnergy").value,
+        priority: document.getElementById("tPriority").value
+      })
+    });
+    closeModal();
+    document.getElementById("tName").value = "";
+    loadTasks();
+  });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeModal(); });
+});
+</script>
+</body>
+</html>

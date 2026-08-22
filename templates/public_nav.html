@@ -1,0 +1,55 @@
+{#
+  Synora — Public TopNav (used by landing / features / methodology).
+  Expected context: active_tab ("features" | "methodology" | None)
+#}
+<header class="bg-surface/80 backdrop-blur-xl fixed top-0 w-full z-50 border-b border-white/10 shadow-sm">
+  <div class="flex justify-between items-center max-w-[1200px] mx-auto h-20 px-5 md:px-0">
+    <a href="/" class="flex items-center active:scale-95 transition-transform">
+      <img src="/static/logo.png" alt="Synora AI Logo" class="h-10 w-auto object-contain">
+    </a>
+
+    <nav class="hidden md:flex gap-8 items-center text-base font-semibold">
+      <a href="/features" class="active:scale-95 transition-transform
+        {% if active_tab == 'features' %}text-primary font-bold border-b-2 border-primary pb-1{% else %}text-on-surface-variant font-medium hover:text-primary transition-colors duration-300{% endif %}">Features</a>
+      <a href="/methodology" class="active:scale-95 transition-transform
+        {% if active_tab == 'methodology' %}text-primary font-bold border-b-2 border-primary pb-1{% else %}text-on-surface-variant font-medium hover:text-primary transition-colors duration-300{% endif %}">Methodology</a>
+    </nav>
+
+    <a href="/signup" class="hidden md:flex bg-primary text-on-primary text-sm font-semibold px-6 py-3 rounded-lg hover:bg-primary-fixed-dim hover:shadow-[0_0_18px_rgba(154,211,182,0.3)] transition-all active:scale-95">
+      Get Started
+    </a>
+    <!-- Mobile Menu Button -->
+    <button id="mobileMenuBtn" class="md:hidden text-primary" aria-label="Open menu">
+      <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">menu</span>
+    </button>
+  </div>
+  <!-- Mobile Dropdown -->
+  <div id="mobileMenu" class="md:hidden hidden bg-surface-container-lowest/95 backdrop-blur-xl border-t border-white/10">
+    <div class="flex flex-col gap-1 px-5 py-4">
+      <a href="/features" class="flex items-center justify-between px-4 py-3 rounded-xl transition-all
+        {% if active_tab == 'features' %}bg-primary-container text-on-primary-container{% else %}text-on-surface-variant hover:bg-surface-container-high{% endif %}">
+        Features
+        {% if active_tab == 'features' %}<span class="material-symbols-outlined text-[18px]">check</span>{% endif %}
+      </a>
+      <a href="/methodology" class="flex items-center justify-between px-4 py-3 rounded-xl transition-all
+        {% if active_tab == 'methodology' %}bg-primary-container text-on-primary-container{% else %}text-on-surface-variant hover:bg-surface-container-high{% endif %}">
+        Methodology
+        {% if active_tab == 'methodology' %}<span class="material-symbols-outlined text-[18px]">check</span>{% endif %}
+      </a>
+      <a href="/signup" class="mt-2 synora-gradient text-on-primary text-sm font-semibold px-6 py-3 rounded-xl text-center">Get Started</a>
+    </div>
+  </div>
+</header>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  var btn = document.getElementById("mobileMenuBtn");
+  var menu = document.getElementById("mobileMenu");
+  if (btn) {
+    btn.addEventListener("click", function () {
+      var open = menu.classList.toggle("hidden");
+      btn.querySelector(".material-symbols-outlined").textContent = open ? "menu" : "close";
+    });
+  }
+});
+</script>
