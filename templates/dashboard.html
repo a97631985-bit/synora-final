@@ -12,15 +12,23 @@
     <div class="flex items-center gap-4">
       <span class="text-xl font-semibold text-on-surface">Dashboard</span>
     </div>
-    <div class="flex items-center gap-2">
-      <button class="text-on-surface-variant hover:bg-white/5 rounded-full p-2 transition-all relative" title="Notifications">
-        <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">notifications</span>
-        <span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full"></span>
-      </button>
-      <div class="w-9 h-9 rounded-full synora-gradient flex items-center justify-center text-on-primary font-bold ml-2 shadow-[0_0_16px_rgba(154,211,182,0.35)]">
-        {{ session.username[0]|upper }}
+<div class="flex items-center gap-2">
+        <button id="demoModeBtn" class="px-3 py-1.5 rounded-full bg-tertiary/20 border border-tertiary/30 text-tertiary text-xs font-semibold hover:bg-tertiary/30 hover:scale-[1.02] transition-all flex items-center gap-1" title="Load Hackathon Demo Data">
+          <span class="material-symbols-outlined text-[16px]">science</span>
+          <span>Demo Mode</span>
+        </button>
+        <button id="clearAllBtn" class="px-3 py-1.5 rounded-full bg-error/20 border border-error/30 text-error text-xs font-semibold hover:bg-error/30 hover:scale-[1.02] transition-all flex items-center gap-1" title="Clear All Demo Data">
+          <span class="material-symbols-outlined text-[16px]">delete_sweep</span>
+          <span>Clear All</span>
+        </button>
+        <button class="text-on-surface-variant hover:bg-white/5 rounded-full p-2 transition-all relative" title="Notifications">
+          <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">notifications</span>
+          <span class="absolute top-2 right-2 w-2 h-2 bg-error rounded-full"></span>
+        </button>
+        <div class="w-9 h-9 rounded-full synora-gradient flex items-center justify-center text-on-primary font-bold ml-2 shadow-[0_0_16px_rgba(154,211,182,0.35)]">
+          {{ session.username[0]|upper }}
+        </div>
       </div>
-    </div>
   </header>
 
   <main class="flex-1 p-5 md:p-10 max-w-7xl mx-auto w-full pb-16">
@@ -89,6 +97,53 @@
           <div class="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-surface/80 to-transparent pointer-events-none"></div>
         </div>
 
+        <div class="flex justify-between mt-3 text-[11px] text-on-surface-variant font-semibold">
+            <span>8AM</span><span>10AM</span><span>12PM</span><span>2PM</span><span>4PM</span><span>6PM</span>
+          </div>
+          <div class="absolute bottom-0 left-0 w-full h-1/2 bg-gradient-to-t from-surface/80 to-transparent pointer-events-none"></div>
+        </div>
+
+        <!-- AI Learning Status & Personal Routine -->
+        <div id="learningCard" class="bg-gradient-to-br from-tertiary/5 to-primary/5 backdrop-blur-xl border border-tertiary/20 rounded-2xl p-6 relative overflow-hidden hidden">
+          <div class="flex items-center justify-between mb-3">
+            <div class="flex items-center gap-2">
+              <span class="w-7 h-7 rounded-full bg-gradient-to-br from-tertiary to-primary flex items-center justify-center text-white text-xs shadow-[0_0_12px_rgba(76,215,246,0.4)]">
+                <span class="material-symbols-outlined text-[18px]">psychology</span>
+              </span>
+              <h3 class="text-lg font-semibold">Synora AI Learning</h3>
+            </div>
+            <span id="learningBadge" class="text-[10px] font-bold px-2 py-1 rounded-full border bg-surface-container-high border-white/5 text-on-surface-variant">Learning...</span>
+          </div>
+          <p id="learningHint" class="text-xs text-on-surface-variant mb-3">Analyzing your patterns...</p>
+          
+          <!-- Personal Energy Curve (24h) -->
+          <div class="mb-4">
+            <div class="flex items-center justify-between mb-2">
+              <span class="text-xs font-semibold text-on-surface-variant">Your Energy Curve (24h)</span>
+              <button onclick="reportEnergy('High')" class="text-xs px-2 py-1 bg-primary/20 text-primary rounded-full hover:bg-primary/30 transition">🔥 High</button>
+            </div>
+            <div id="personalEnergyChart" class="h-20 w-full flex items-end justify-between gap-1 relative z-10">
+              <span class="text-xs text-on-surface-variant w-full text-center">Loading your curve...</span>
+            </div>
+            <div class="flex justify-between mt-1 text-[10px] text-on-surface-variant font-semibold">
+              <span>6AM</span><span>9AM</span><span>12PM</span><span>3PM</span><span>6PM</span><span>9PM</span><span>12AM</span>
+            </div>
+          </div>
+
+          <!-- Personal Routine -->
+          <div id="routineSection" class="hidden">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-semibold">Your Personal Routine</h4>
+              <span class="text-[10px] px-2 py-1 bg-primary/20 text-primary rounded-full">v<span id="routineVersion">1</span></span>
+            </h4>
+            <div id="routineBlocks" class="space-y-2 text-sm"></div>
+            <button onclick="applyRoutineToToday()" class="w-full mt-3 py-2 px-3 bg-primary text-on-primary text-sm font-semibold rounded-xl hover:opacity-90 transition flex items-center justify-center gap-2">
+              <span class="material-symbols-outlined text-[16px]">schedule_send</span>
+              Apply to Today's Plan
+            </button>
+          </div>
+        </div>
+
         <!-- AI Quiz Card -->
         <div class="bg-primary-container/10 backdrop-blur-xl border border-primary/20 rounded-2xl p-6 relative overflow-hidden group hover:border-primary/40 transition-all">
           <div class="absolute top-0 right-0 w-24 h-24 bg-tertiary/10 rounded-full blur-[20px] -mr-8 -mt-8 pointer-events-none"></div>
@@ -141,6 +196,12 @@
                 <button type="button" data-quick-priority="P1" class="quick-prio w-full px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all flex items-center gap-2 bg-primary/5 border-primary/20 text-primary hover:bg-primary/15">
                   <span class="text-sm">🔴</span> Power Task
                 </button>
+                <button type="button" data-quick-priority="P4" class="quick-prio w-full px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all flex items-center gap-2 bg-tertiary/5 border-tertiary/20 text-tertiary hover:bg-tertiary/15">
+                  <span class="text-sm">🔵</span> Break
+                </button>
+                <button type="button" data-quick-priority="P5" class="quick-prio w-full px-3 py-2.5 rounded-xl border text-xs font-semibold transition-all flex items-center gap-2 bg-white/5 border-white/10 text-on-surface-variant hover:bg-white/10">
+                  <span class="text-sm">⚪</span> Unproductive
+                </button>
               </div>
               <button type="submit" class="w-full mt-3 py-2.5 synora-gradient text-on-primary text-sm font-bold rounded-xl hover:opacity-90 hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center gap-2">
                 <span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">add_task</span>
@@ -172,7 +233,7 @@ function taskCardHTML(t) {
   var healed = t.healed
     ? ' <span class="material-symbols-outlined text-tertiary text-[16px] healing-glow rounded-full" title="Rescheduled by AI">auto_fix_normal</span>'
     : "";
-  var priorityLabel = t.priority === "P1" ? "🔴 Power Task" : t.priority === "P3" ? "🟢 Quick Win" : "🟡 Focus Task";
+  var priorityLabel = t.priority === "P1" ? "🔴 Power Task" : t.priority === "P3" ? "🟢 Quick Win" : t.priority === "P4" ? "🔵 Break" : t.priority === "P5" ? "⚪ Unproductive" : "🟡 Focus Task";
   return '<div class="bg-surface/60 backdrop-blur-xl border border-white/10 rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:border-white/20 hover:scale-[1.01] transition-all group">'
     + '<div class="flex items-start sm:items-center gap-4">'
     + '<button onclick="toggleTask(\'' + t.id + '\')" class="w-6 h-6 rounded-full border-2 shrink-0 mt-1 sm:mt-0 flex items-center justify-center transition-colors ' + (t.completed ? "bg-primary border-primary" : "border-outline-variant group-hover:border-primary") + '">'
@@ -183,14 +244,69 @@ function taskCardHTML(t) {
     + '<h4 class="text-sm font-semibold ' + (t.completed ? "line-through opacity-50" : "text-on-surface") + '">' + t.name + '</h4>' + healed
     + '</div>'
     + '<div class="flex items-center gap-2 mt-1 text-on-surface-variant text-sm">'
-    + '<span class="material-symbols-outlined text-[16px]">schedule</span>'
-    + '<span>' + fmtTime(t.start_time) + ' - ' + fmtTime(t.end_time) + '</span>'
+    + (t.no_time
+        ? '<span class="material-symbols-outlined text-[16px]">event_available</span><span>Daily Target' + (t.duration ? ' • ~' + t.duration + 'm' : '') + '</span>'
+        : '<span class="material-symbols-outlined text-[16px]">schedule</span><span class="task-time">' + fmtTime(t.start_time) + ' - ' + fmtTime(t.end_time) + '</span>')
     + '</div></div></div>'
     + '<div class="flex items-center gap-2 self-start sm:self-auto ml-10 sm:ml-0">'
     + '<span class="px-2 py-1 rounded-full text-xs font-semibold flex items-center gap-1 border ' + energyColor + '">'
     + '<span class="material-symbols-outlined text-[14px]">' + energyIcon + '</span> ' + t.energy + ' Energy</span>'
     + '<span class="px-2 py-1 bg-surface-container-high text-on-surface rounded-full text-xs font-semibold border border-white/5">' + priorityLabel + '</span>'
+    + '<button onclick="openEditModal(\'' + t.id + '\')" title="Edit task" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-primary hover:bg-primary-container/30 transition-all">'
+    + '<span class="material-symbols-outlined text-[16px]">edit</span></button>'
+    + (t.is_syllabus ? '' : '<button onclick="deleteTask(\'' + t.id + '\')" title="Delete task" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-error hover:bg-error-container/30 transition-all">'
+    + '<span class="material-symbols-outlined text-[16px]">delete</span></button>')
     + '</div></div>';
+}
+
+/* ===== EDIT TASK ===== */
+var editTaskId = null;
+
+function openEditModal(id) {
+  var t = null;
+  fetch("/api/tasks").then(function(r){ return r.json(); }).then(function(data){
+    t = (data.tasks || []).find(function(x){ return x.id === id; });
+    if (!t) return;
+    editTaskId = id;
+    document.getElementById("editName").value = t.name;
+    document.getElementById("editDate").value = t.date || new Date().toISOString().slice(0,10);
+    document.getElementById("editStart").value = t.start_time;
+    document.getElementById("editEnd").value = t.end_time;
+    document.getElementById("editEnergy").value = t.energy || "Med";
+    document.getElementById("editPriority").value = t.priority || "P2";
+    var m = document.getElementById("editModal");
+    m.classList.remove("hidden"); m.classList.add("flex");
+  });
+}
+
+function closeEditModal() {
+  var m = document.getElementById("editModal");
+  m.classList.add("hidden"); m.classList.remove("flex");
+  editTaskId = null;
+}
+
+async function saveEdit() {
+  if (!editTaskId) return;
+  await fetch("/api/tasks/" + editTaskId, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      name: document.getElementById("editName").value,
+      date: document.getElementById("editDate").value,
+      start_time: document.getElementById("editStart").value,
+      end_time: document.getElementById("editEnd").value,
+      energy: document.getElementById("editEnergy").value,
+      priority: document.getElementById("editPriority").value
+    })
+  });
+  closeEditModal();
+  loadTasks();
+}
+
+async function deleteTask(id) {
+  if (!confirm("Delete this task?")) return;
+  await fetch("/api/tasks/" + id, { method: "DELETE" });
+  loadTasks();
 }
 
 async function loadTasks() {
@@ -198,7 +314,8 @@ async function loadTasks() {
     var res = await fetch("/api/tasks");
     var data = await res.json();
     var today = new Date().toISOString().slice(0,10);
-    var tasks = (data.tasks || []).filter(function(t){ return !t.date || t.date === today; });
+    /* Show all regular tasks; syllabus plan tasks only if due today (full timeline lives in Planner) */
+    var tasks = (data.tasks || []).filter(function(t){ return !t.is_syllabus || t.date === today || t.completed; });
     var list = document.getElementById("taskList");
     if (!tasks.length) {
       list.innerHTML = '<div class="glass-panel rounded-2xl p-8 text-center text-on-surface-variant"><span class="material-symbols-outlined text-[40px] text-primary">self_improvement</span><p class="mt-2">Your day is clear. Add a task to begin.</p></div>';
@@ -208,6 +325,215 @@ async function loadTasks() {
   } catch (e) {
     document.getElementById("taskList").innerHTML = '<div class="glass-panel rounded-2xl p-6 text-center text-error">Failed to load tasks.</div>';
   }
+}
+
+/* Heal animation: sliced-out dropped tasks + time-cuts + rescheduled moves */
+function animateHeal(cuts, newSchedule, oldTasks, droppedNames, done) {
+  var list = document.getElementById("taskList");
+  if (!list) { if (done) done(); return; }
+  if (typeof cuts === "function") { done = cuts; cuts = []; }
+  if (typeof newSchedule === "function") { done = newSchedule; newSchedule = []; }
+  if (typeof oldTasks === "function") { done = oldTasks; oldTasks = []; }
+  if (typeof droppedNames === "function") { done = droppedNames; droppedNames = []; }
+  cuts = cuts || [];
+  newSchedule = newSchedule || [];
+  oldTasks = oldTasks || [];
+  droppedNames = (droppedNames || []).map(function(n){ return String(n).toLowerCase(); });
+  var cards = Array.prototype.slice.call(list.children).filter(function(c){ return c.tagName === "DIV"; });
+  if (!cards.length) { if (done) done(); return; }
+
+  /* Lookup maps */
+  var cutMap = {};
+  cuts.forEach(function(c){ cutMap[c.name.toLowerCase()] = c; });
+
+  var newTimeMap = {};
+  newSchedule.forEach(function(s){
+    if (s.name && s.start_time && s.end_time) {
+      newTimeMap[s.name.toLowerCase()] = s.start_time + "–" + s.end_time;
+    }
+  });
+
+  /* Overlay: healing sweep */
+  var overlay = document.createElement("div");
+  overlay.style.cssText = "position:fixed;inset:0;z-index:90;pointer-events:none;";
+  overlay.innerHTML = '<div style="position:absolute;inset:0;background:radial-gradient(circle at 50% 30%, rgba(76,215,246,0.12), transparent 60%);opacity:0;transition:opacity .5s;" id="healGlow"></div>'
+    + '<div id="healSpark" class="material-symbols-outlined" style="position:absolute;top:20%;left:50%;transform:translate(-50%,-50%);font-size:64px;color:#4cd7f6;opacity:0;transition:all .6s;text-shadow:0 0 40px rgba(76,215,246,0.8);">auto_fix_high</div>';
+  document.body.appendChild(overlay);
+
+  function el(id){ return overlay.querySelector("#"+id); }
+  setTimeout(function(){ el("healGlow").style.opacity = "1"; }, 50);
+  setTimeout(function(){
+    var s = el("healSpark");
+    s.style.opacity = "1";
+    s.style.top = "18%";
+    s.style.transform = "translate(-50%,-50%) rotate(-15deg) scale(1.3)";
+  }, 300);
+
+  /* ===== PHASE 0: SLICE OUT dropped tasks (✂ two halves fly apart) ===== */
+  var droppedCards = [];
+  if (droppedNames.length) {
+    cards.forEach(function (card) {
+      var nameEl = card.querySelector("h4");
+      var cname = nameEl ? nameEl.textContent.trim().toLowerCase() : "";
+      if (droppedNames.indexOf(cname) !== -1) droppedCards.push(card);
+    });
+  }
+
+  var SLICE_START = 500;
+  var SLICE_STAGGER = 160;
+
+  function sliceCard(card, delay) {
+    setTimeout(function () {
+      /* red alert flash + badge */
+      card.style.transition = "all .35s";
+      card.style.boxShadow = "0 0 26px rgba(248,113,113,0.55)";
+      card.style.borderColor = "rgba(248,113,113,0.75)";
+      var badge = document.createElement("span");
+      badge.textContent = "✂ Removed";
+      badge.style.cssText = "position:absolute;top:-9px;left:12px;background:#f87171;color:#fff;font-size:11px;font-weight:800;padding:2px 10px;border-radius:9999px;box-shadow:0 2px 10px rgba(248,113,113,0.6);z-index:6;";
+      card.style.position = "relative";
+      card.appendChild(badge);
+
+      setTimeout(function () {
+        var rect = card.getBoundingClientRect();
+        var halfH = Math.ceil(rect.height / 2) + 1;
+        var halves = [];
+        [ ["inset(0 0 50% 0)", "-42px,-56px,-14deg"],   /* top half flies up-left */
+          ["inset(50% 0 0 0)", "42px,56px,14deg"]       /* bottom half falls down-right */
+        ].forEach(function (cfg, k) {
+          var half = card.cloneNode(true);
+          var b = half.querySelector("span[style*='f87171']"); if (b) b.remove();
+          half.style.cssText = "position:fixed;margin:0;z-index:96;pointer-events:none;"
+            + "left:" + rect.left + "px;top:" + rect.top + "px;width:" + rect.width + "px;height:" + rect.height + "px;"
+            + "clip-path:" + cfg[0] + ";-webkit-clip-path:" + cfg[0] + ";"
+            + "transition:all .55s cubic-bezier(.5,-0.2,.7,1);";
+          document.body.appendChild(half);
+          halves.push({ node: half, move: cfg[1] });
+        });
+        /* hide the original instantly */
+        card.style.visibility = "hidden";
+
+        requestAnimationFrame(function () {
+          requestAnimationFrame(function () {
+            halves.forEach(function (h) {
+              var p = h.move.split(",");
+              h.node.style.transform = "translate(" + p[0] + "," + p[1] + ") rotate(" + p[2] + ")";
+              h.node.style.opacity = "0";
+            });
+          });
+        });
+        setTimeout(function () {
+          halves.forEach(function (h) { h.node.remove(); });
+          card.remove();
+        }, 650);
+      }, 700);
+    }, delay);
+  }
+
+  droppedCards.forEach(function (card, i) {
+    sliceCard(card, SLICE_START + i * SLICE_STAGGER);
+  });
+  var sliceDone = droppedCards.length
+    ? SLICE_START + (droppedCards.length - 1) * SLICE_STAGGER + 1450
+    : 200;
+
+  /* ===== PHASE 1: Cut phase — trimmed tasks flash amber with before→after badge ===== */
+  var hasCuts = cuts.length > 0;
+  if (hasCuts) {
+    var cutDelayBase = sliceDone;
+    cards.forEach(function (card) {
+      if (droppedCards.indexOf(card) !== -1) return;
+      var nameEl = card.querySelector("h4");
+      var cname = nameEl ? nameEl.textContent.trim().toLowerCase() : "";
+      if (!(cname in cutMap)) return;
+      var cut = cutMap[cname];
+      cutDelayBase += 90;
+      setTimeout(function () {
+        card.style.transition = "all .45s cubic-bezier(.34,1.56,.64,1)";
+        card.style.boxShadow = "0 0 20px rgba(255,170,60,0.4)";
+        card.style.borderColor = "rgba(251,146,60,0.6)";
+        var badge = document.createElement("span");
+        var before = cut.before ? cut.before + "m" : "";
+        var after = cut.after ? cut.after + "m" : "";
+        badge.textContent = before + " → " + after;
+        badge.style.cssText = "position:absolute;top:-8px;right:12px;background:#fb923c;color:#fff;font-size:11px;font-weight:800;padding:2px 8px;border-radius:9999px;box-shadow:0 2px 8px rgba(251,146,60,0.5);z-index:5;";
+        badge.className = "heal-cut-badge";
+        card.style.position = "relative";
+        card.appendChild(badge);
+        setTimeout(function () {
+          card.style.opacity = ".55";
+          badge.style.transition = "all .5s";
+          badge.style.opacity = "0";
+          badge.style.top = "-16px";
+        }, 900);
+      }, cutDelayBase);
+    });
+  }
+
+  /* ===== PHASE 2: lift & shuffle surviving cards ===== */
+  var shuffleDelay = sliceDone + (hasCuts ? Math.min(cards.length * 90, 700) + 1100 : 200);
+  cards.forEach(function (card, i) {
+    if (droppedCards.indexOf(card) !== -1) return;
+    card.style.transition = card.style.transition || "transform .4s cubic-bezier(.34,1.56,.64,1), opacity .4s, box-shadow .4s";
+    setTimeout(function () {
+      card.style.transform = "translateX(" + ((i % 2 ? -1 : 1) * 14) + "px) scale(.96)";
+      card.style.opacity = hasCuts ? "" : ".45";
+    }, shuffleDelay + i * 70);
+  });
+
+  /* ===== PHASE 3: snap back — rescheduled tasks show old→new time arrows ===== */
+  var snapDelay = shuffleDelay + cards.length * 70 + 400;
+  setTimeout(function () {
+    var s = el("healSpark");
+    s.style.transition = "all .5s";
+    s.style.top = "50%";
+    s.style.opacity = "0.9";
+    cards.forEach(function (card, i) {
+      if (droppedCards.indexOf(card) !== -1) return;
+      setTimeout(function () {
+        card.style.transform = "translateX(0) scale(1)";
+        card.style.opacity = "1";
+        card.style.boxShadow = "0 0 24px rgba(76,215,246,0.35), inset 0 0 0 1px rgba(76,215,246,0.25)";
+
+        /* old→new time transition for moved tasks */
+        var nameEl = card.querySelector("h4");
+        var cname = nameEl ? nameEl.textContent.trim().toLowerCase() : "";
+        var oldTask = oldTasks.find(function(t){ return t.name.toLowerCase() === cname; });
+        var newTime = newTimeMap[cname];
+        if (oldTask && newTime && oldTask.oldTime && oldTask.oldTime !== newTime) {
+          var arrow = document.createElement("span");
+          arrow.textContent = oldTask.oldTime + " → " + newTime;
+          arrow.style.cssText = "position:absolute;left:50%;bottom:-22px;transform:translateX(-50%);background:#4cd7f6;color:#001d23;font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;white-space:nowrap;box-shadow:0 2px 8px rgba(76,215,246,0.5);z-index:10;opacity:0;transition:all .4s cubic-bezier(.34,1.56,.64,1);";
+          arrow.className = "heal-time-arrow";
+          card.style.position = "relative";
+          card.appendChild(arrow);
+          setTimeout(function(){
+            arrow.style.opacity = "1";
+            arrow.style.bottom = "-26px";
+          }, 50);
+          setTimeout(function(){
+            arrow.style.opacity = "0";
+            arrow.style.bottom = "-30px";
+            setTimeout(function(){ if (arrow.parentNode) arrow.remove(); }, 400);
+          }, 2200);
+        }
+
+        setTimeout(function(){
+          card.style.boxShadow = "";
+          card.style.borderColor = "";
+          var b = card.querySelector(".heal-cut-badge");
+          if (b) b.remove();
+        }, 700);
+      }, i * 120);
+    });
+  }, snapDelay);
+
+  /* Cleanup */
+  setTimeout(function () {
+    el("healGlow").style.opacity = "0";
+    overlay.remove();
+    if (done) done();
+  }, snapDelay + cards.length * 120 + 1000);
 }
 
 async function toggleTask(id) {
@@ -269,6 +595,169 @@ async function loadPredictedEnergy() {
   } catch (e) {}
 }
 
+/* ========== AI LEARNING FUNCTIONS ========== */
+
+async function loadLearningStatus() {
+  try {
+    var res = await fetch("/api/learning/status");
+    var d = await res.json();
+    var card = document.getElementById("learningCard");
+    var badge = document.getElementById("learningBadge");
+    var hint = document.getElementById("learningHint");
+    if (d.model_trained) {
+      card.classList.remove("hidden");
+      badge.textContent = "Model Trained ✓";
+      badge.className = "text-[10px] font-bold px-2 py-1 rounded-full border bg-primary/20 text-primary border-primary/30";
+      hint.textContent = "Your personal model is active! " + d.days_of_data + " days of data, " + d.total_reports + " reports. Routine v" + d.routine_version + " ready.";
+    } else {
+      card.classList.remove("hidden");
+      badge.textContent = "Learning... " + d.days_of_data + "/3 days";
+      badge.className = "text-[10px] font-bold px-2 py-1 rounded-full border bg-tertiary/20 text-tertiary border-tertiary/30";
+      hint.textContent = "Complete tasks and report energy. " + (3 - d.days_of_data) + " more days needed for personal routine.";
+    }
+    if (d.ready_for_routine && !d.model_trained) {
+      hint.textContent += " Routine will generate automatically soon!";
+    }
+  } catch (e) {}
+}
+
+async function loadPersonalEnergyCurve() {
+  try {
+    var res = await fetch("/api/learning/energy-curve");
+    var d = await res.json();
+    var chart = document.getElementById("personalEnergyChart");
+    if (!chart) return;
+    chart.innerHTML = d.curve.map(function (h) {
+      var v = Math.round(h.energy * 100);
+      var color = v >= 70 ? "bg-primary/80 shadow-[0_0_12px_rgba(154,211,182,0.5)]"
+        : v >= 50 ? "bg-tertiary/70 shadow-[0_0_10px_rgba(76,215,246,0.4)]"
+        : v >= 35 ? "bg-secondary/50"
+        : "bg-error/40";
+      var cls = "flex-1 rounded-t-md hover:brightness-110 transition-all duration-500 " + color;
+      return '<div class="' + cls + '" style="height:' + v + '%" title="' + h.label + ': ' + v + '%"></div>';
+    }).join("");
+    if (d.model_active) {
+      document.getElementById("personalEnergyChart").title = "Personal model active — " + d.data_days + " days of data";
+    }
+  } catch (e) {}
+}
+
+async function loadPersonalRoutine() {
+  try {
+    var res = await fetch("/api/learning/routine");
+    var d = await res.json();
+    var sec = document.getElementById("routineSection");
+    var blocks = document.getElementById("routineBlocks");
+    var ver = document.getElementById("routineVersion");
+    if (d.routine) {
+      sec.classList.remove("hidden");
+      ver.textContent = d.routine_version || 1;
+      var html = "";
+      if (d.routine.work_blocks && d.routine.work_blocks.length) {
+        d.routine.work_blocks.forEach(function(wb) {
+          html += '<div class="flex items-center gap-3 p-3 bg-surface-container-low rounded-xl border border-primary/20">'
+            + '<span class="material-symbols-outlined text-primary shrink-0">schedule</span>'
+            + '<div class="flex-1"><div class="font-semibold text-primary">' + wb.name + '</div>'
+            + '<div class="text-xs text-on-surface-variant">' + wb.start + ' – ' + wb.end + ' (' + wb.duration_min + ' min) • ' + wb.type + '</div></div></div>';
+        });
+      }
+      if (d.routine.break_times && d.routine.break_times.length) {
+        d.routine.break_times.forEach(function(br) {
+          html += '<div class="flex items-center gap-3 p-3 bg-surface-container-low rounded-xl border border-tertiary/20">'
+            + '<span class="material-symbols-outlined text-tertiary shrink-0">coffee</span>'
+            + '<div class="flex-1"><div class="font-semibold text-tertiary">Break</div>'
+            + '<div class="text-xs text-on-surface-variant">' + br.start + ' – ' + br.end + '</div></div></div>';
+        });
+      }
+      if (d.routine.wake_time) {
+        html += '<div class="flex items-center gap-3 p-3 bg-surface-container-low rounded-xl border border-secondary/20">'
+          + '<span class="material-symbols-outlined text-secondary shrink-0">wb_sunny</span>'
+          + '<div class="flex-1"><div class="font-semibold text-secondary">Wake Up</div>'
+          + '<div class="text-xs text-on-surface-variant">' + d.routine.wake_time + '</div></div></div>';
+      }
+      if (d.routine.sleep_time) {
+        html += '<div class="flex items-center gap-3 p-3 bg-surface-container-low rounded-xl border border-secondary/20">'
+          + '<span class="material-symbols-outlined text-secondary shrink-0">bedtime</span>'
+          + '<div class="flex-1"><div class="font-semibold text-secondary">Sleep</div>'
+          + '<div class="text-xs text-on-surface-variant">' + d.routine.sleep_time + '</div></div></div>';
+      }
+      blocks.innerHTML = html || '<div class="text-center text-on-surface-variant py-4">No routine blocks yet</div>';
+    } else {
+      sec.classList.add("hidden");
+      var msg = d.message || "Not enough data yet";
+      blocks.innerHTML = '<div class="text-center text-on-surface-variant py-4">' + msg + '</div>';
+    }
+  } catch (e) {}
+}
+
+function reportEnergy(level) {
+  fetch("/api/learning/report-energy", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ energy: level, hour: new Date().getHours() })
+  }).then(function(r){ return r.json(); }).then(function(d){
+    if (d.ok) {
+      loadLearningStatus();
+      loadPersonalEnergyCurve();
+      loadPredictedEnergy();
+      var toast = document.getElementById("healToast");
+      if (toast) {
+        document.getElementById("healToastText").textContent = "Energy reported: " + level + " at " + new Date().getHours() + ":00";
+        toast.classList.remove("hidden");
+        setTimeout(function(){ toast.classList.add("hidden"); }, 3000);
+      }
+    }
+  });
+}
+
+async function applyRoutineToToday() {
+  try {
+    var res = await fetch("/api/learning/routine");
+    var d = await res.json();
+    if (!d.routine || !d.routine.work_blocks) return;
+    var today = new Date().toISOString().slice(0,10);
+    for (var wb of d.routine.work_blocks) {
+      await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: wb.name,
+          start_time: wb.start,
+          end_time: wb.end,
+          energy: wb.type === "P1" ? "High" : "Med",
+          priority: wb.type,
+          date: today,
+          is_syllabus: false
+        })
+      });
+    }
+    if (d.routine.break_times) {
+      for (var br of d.routine.break_times) {
+        await fetch("/api/tasks", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            name: "Break",
+            start_time: br.start,
+            end_time: br.end,
+            energy: "Low",
+            priority: "P4",
+            date: today,
+            is_syllabus: false
+          })
+        });
+      }
+    }
+    loadTasks();
+    var toast = document.getElementById("healToast");
+    if (toast) {
+      document.getElementById("healToastText").textContent = "Personal routine applied to today!";
+      toast.classList.remove("hidden");
+      setTimeout(function(){ toast.classList.add("hidden"); }, 3000);
+    }
+  } catch (e) {}
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   var ws = document.getElementById("welcomeSection");
   setTimeout(function () { ws.style.opacity = "1"; ws.style.transform = "translateY(0)"; }, 100);
@@ -276,6 +765,9 @@ document.addEventListener("DOMContentLoaded", function () {
   loadTasks();
   loadStreak();
   loadPredictedEnergy();
+  loadLearningStatus();
+  loadPersonalEnergyCurve();
+  loadPersonalRoutine();
 
   /* Reveal time + task-type steps once a name is typed */
   var quickInput = document.getElementById("quickAddInput");
@@ -290,17 +782,27 @@ document.addEventListener("DOMContentLoaded", function () {
   }
   quickInput.addEventListener("input", syncQuickSteps);
 
-  /* Task type chips: Quick Win / Focus Task / Power Task */
+  /* Task type chips: Quick Win / Focus Task / Power Task / Break / Unproductive */
+  function origClasses(p) {
+    if (p === "P4") return ["bg-tertiary/5", "border-tertiary/20", "text-tertiary", "hover:bg-tertiary/15"];
+    if (p === "P5") return ["bg-white/5", "border-white/10", "text-on-surface-variant", "hover:bg-white/10"];
+    return ["bg-primary/5", "border-primary/20", "text-primary", "hover:bg-primary/15"];
+  }
   document.querySelectorAll(".quick-prio").forEach(function (btn) {
     btn.addEventListener("click", function () {
       quickPriority = btn.dataset.quickPriority;
       document.querySelectorAll(".quick-prio").forEach(function (b) {
+        var pri = b.dataset.quickPriority;
+        var orig = origClasses(pri);
+        // reset all to original
+        b.classList.remove("bg-primary", "text-on-primary", "border-primary", "shadow-[0_0_14px_rgba(154,211,182,0.35)]",
+          "bg-primary/5", "border-primary/20", "text-primary", "hover:bg-primary/15",
+          "bg-tertiary/5", "border-tertiary/20", "text-tertiary", "hover:bg-tertiary/15",
+          "bg-white/5", "border-white/10", "text-on-surface-variant", "hover:bg-white/10");
         if (b === btn) {
           b.classList.add("bg-primary", "text-on-primary", "border-primary", "shadow-[0_0_14px_rgba(154,211,182,0.35)]");
-          b.classList.remove("bg-primary/5", "text-primary", "border-primary/20");
         } else {
-          b.classList.remove("bg-primary", "text-on-primary", "border-primary", "shadow-[0_0_14px_rgba(154,211,182,0.35)]");
-          b.classList.add("bg-primary/5", "text-primary", "border-primary/20");
+          orig.forEach(function(c){ b.classList.add(c); });
         }
       });
     });
@@ -342,7 +844,208 @@ document.addEventListener("DOMContentLoaded", function () {
       quickAdd();
     }
   });
+
+  /* ========== HACKATHON DEMO MODE ========== */
+  function loadDemoData() {
+    var btn = document.getElementById("demoModeBtn");
+    var originalHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-outlined animate-spin" style="font-variation-settings: \'FILL\' 1;">progress_activity</span> Loading Demo...';
+
+    // Clear existing tasks
+    fetch("/api/tasks").then(function(r){ return r.json(); }).then(function(data){
+      var tasks = data.tasks || [];
+      var deletePromises = tasks.map(function(t){ return fetch("/api/tasks/" + t.id, {method:"DELETE"}); });
+      Promise.all(deletePromises).then(function(){
+        // FULL-DAY SMART TIMETABLE — every block of the day covered, energy-matched
+        var demoTasks = [
+          /* ---- Morning Routine ---- */
+          {name:"Wake Up + Freshen Up", start_time:"06:30", end_time:"07:00", energy:"Low", priority:"P4"},
+          {name:"Morning Walk + Stretching", start_time:"07:00", end_time:"07:30", energy:"Med", priority:"P4"},
+          {name:"Breakfast + News", start_time:"07:30", end_time:"08:00", energy:"Low", priority:"P4"},
+
+          /* ---- Peak Morning Energy: Hardest Work ---- */
+          {name:"Deep Work: Maths — Calculus Ch5", start_time:"08:00", end_time:"10:00", energy:"High", priority:"P1"},
+          {name:"Short Break: Tea + Stretch", start_time:"10:00", end_time:"10:15", energy:"Low", priority:"P4"},
+          {name:"Deep Work: Physics — Numericals", start_time:"10:15", end_time:"12:00", energy:"High", priority:"P1"},
+
+          /* ---- Midday Recharge ---- */
+          {name:"Lunch + Family Time", start_time:"12:00", end_time:"13:00", energy:"Low", priority:"P4"},
+          {name:"Power Nap", start_time:"13:00", end_time:"13:30", energy:"Low", priority:"P4"},
+
+          /* ---- Afternoon Recovery: Medium Work ---- */
+          {name:"Focus: Chemistry — Organic Notes", start_time:"13:30", end_time:"15:00", energy:"Med", priority:"P2"},
+          {name:"Quick Win: Flashcards Revision", start_time:"15:00", end_time:"15:45", energy:"Low", priority:"P3"},
+          {name:"Evening Snack + Walk", start_time:"15:45", end_time:"16:15", energy:"Low", priority:"P4"},
+
+          /* ---- Second Peak: Practice ---- */
+          {name:"Practice: PYQs Mock Set", start_time:"16:15", end_time:"18:00", energy:"High", priority:"P1"},
+          {name:"Break: Music + Chill", start_time:"18:00", end_time:"18:30", energy:"Low", priority:"P4"},
+
+          /* ---- Evening: Light Work ---- */
+          {name:"Team Study Group Call", start_time:"18:30", end_time:"19:15", energy:"Med", priority:"P2"},
+          {name:"Dinner", start_time:"19:15", end_time:"20:00", energy:"Low", priority:"P4"},
+
+          /* ---- Night Wind-down ---- */
+          {name:"Revision: Today's Mistakes", start_time:"20:00", end_time:"21:00", energy:"Med", priority:"P2"},
+          {name:"Plan Tomorrow + Journal", start_time:"21:00", end_time:"21:30", energy:"Low", priority:"P3"},
+          {name:"No Screen: Reading Book", start_time:"21:30", end_time:"22:15", energy:"Low", priority:"P3"},
+
+          /* ---- Guilty Pleasures (AI will cut these if day slips!) ---- */
+          {name:"Gaming Session", start_time:"22:15", end_time:"23:00", energy:"Low", priority:"P5"},
+          {name:"Scrolling Reels", start_time:"23:00", end_time:"23:45", energy:"Low", priority:"P5"},
+          {name:"Sleep", start_time:"23:45", end_time:"06:30", energy:"Low", priority:"P4"}
+        ];
+        var created = 0;
+        demoTasks.forEach(function(t){
+          fetch("/api/tasks", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(t)})
+            .then(function(){ created++; if(created === demoTasks.length){ finishDemo(); }});
+        });
+      });
+    });
+
+    function finishDemo(){
+      // Add focus sessions for streak
+      fetch("/api/focus/record", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({seconds:1500, mode:"timer"})});
+      fetch("/api/focus/record", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({seconds:3600, mode:"stopwatch"})});
+
+      // Keep the beautiful full-day timetable intact — user demos Fix My Day manually
+
+      btn.disabled = false;
+      btn.innerHTML = originalHtml;
+      btn.classList.add("bg-primary/20", "border-primary/30");
+      setTimeout(function(){ btn.classList.remove("bg-primary/20", "border-primary/30"); }, 2000);
+
+      // Refresh all widgets
+      if (typeof loadTasks === "function") loadTasks();
+      if (typeof loadStreak === "function") loadStreak();
+      if (typeof loadPredictedEnergy === "function") loadPredictedEnergy();
+      if (typeof loadCurrentFocus === "function") loadCurrentFocus();
+      if (typeof checkMissed === "function") checkMissed();
+
+      // Show toast
+      var toast = document.getElementById("healToast");
+      if (toast) {
+        document.getElementById("healToastText").textContent = "Full-day smart timetable loaded (21 blocks)! Now hit Fix My Day to watch AI heal it.";
+        toast.classList.remove("hidden");
+        setTimeout(function(){ toast.classList.add("hidden"); }, 6000);
+      }
+    }
+  }
+
+  /* ========== CLEAR ALL DATA ========== */
+  function clearAllData() {
+    var btn = document.getElementById("clearAllBtn");
+    var originalHtml = btn.innerHTML;
+    if (!confirm("Clear ALL data? This will delete all tasks, focus sessions, quiz history, and plans. Cannot be undone.")) return;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="material-symbols-outlined animate-spin" style="font-variation-settings: \'FILL\' 1;">progress_activity</span> Clearing...';
+
+    // Delete all tasks
+    fetch("/api/tasks").then(function(r){ return r.json(); }).then(function(data){
+      var tasks = data.tasks || [];
+      var deletePromises = tasks.map(function(t){ return fetch("/api/tasks/" + t.id, {method:"DELETE"}); });
+      Promise.all(deletePromises).then(function(){
+        // Clear focus sessions
+        fetch("/api/focus/record", {method:"DELETE"}).catch(function(){});
+        // Clear quiz history
+        fetch("/api/quiz/history", {method:"DELETE"}).catch(function(){});
+        // Clear syllabus plans
+        fetch("/api/syllabus/plans").then(function(r){ return r.json(); }).then(function(data){
+          var plans = data.plans || [];
+          var deletePlanPromises = plans.map(function(p){ return fetch("/api/syllabus/" + p.id, {method:"DELETE"}); });
+          Promise.all(deletePlanPromises).then(function(){
+            // Reset streak
+            fetch("/api/streak", {method:"DELETE"}).catch(function(){});
+            
+            // Reload all
+            if (typeof loadTasks === "function") loadTasks();
+            if (typeof loadStreak === "function") loadStreak();
+            if (typeof loadPredictedEnergy === "function") loadPredictedEnergy();
+            if (typeof loadCurrentFocus === "function") loadCurrentFocus();
+            if (typeof checkMissed === "function") checkMissed();
+            if (typeof loadStats === "function") loadStats();
+            if (typeof loadPlans === "function") loadPlans();
+
+            btn.disabled = false;
+            btn.innerHTML = '<span class="material-symbols-outlined text-[16px]">delete_sweep</span><span>Clear All</span>';
+            
+            var toast = document.getElementById("healToast");
+            if (toast) {
+              document.getElementById("healToastText").textContent = "All data cleared! Fresh start.";
+              toast.classList.remove("hidden");
+              setTimeout(function(){ toast.classList.add("hidden"); }, 4000);
+            }
+          });
+        });
+      });
+    });
+  }
+
+  document.getElementById("demoModeBtn").addEventListener("click", loadDemoData);
+  document.getElementById("clearAllBtn").addEventListener("click", clearAllData);
 });
 </script>
+
+<!-- ===== Edit Task Modal ===== -->
+<div id="editModal" class="hidden fixed inset-0 z-[100] items-center justify-center p-4">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm" onclick="closeEditModal()"></div>
+  <div class="relative glass-strong rounded-3xl p-6 w-full max-w-md shadow-2xl border border-white/10">
+    <div class="flex items-center justify-between mb-5">
+      <h3 class="text-xl font-bold flex items-center gap-2">
+        <span class="material-symbols-outlined text-tertiary" style="font-variation-settings: 'FILL' 1;">edit_square</span>
+        Edit Task
+      </h3>
+      <button onclick="closeEditModal()" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-white/10 hover:text-on-surface transition-all">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <div class="flex flex-col gap-4">
+      <div>
+        <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">Task Name</label>
+        <input id="editName" class="w-full input-glass text-on-surface rounded-xl px-4 py-3" placeholder="Task name">
+      </div>
+      <div>
+        <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">Date</label>
+        <input id="editDate" type="date" class="w-full input-glass text-on-surface rounded-xl px-4 py-3">
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">Start</label>
+          <input id="editStart" type="time" class="w-full input-glass text-on-surface rounded-xl px-4 py-3">
+        </div>
+        <div>
+          <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">End</label>
+          <input id="editEnd" type="time" class="w-full input-glass text-on-surface rounded-xl px-4 py-3">
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">Energy</label>
+          <select id="editEnergy" class="w-full input-glass text-on-surface rounded-xl px-4 py-3 cursor-pointer">
+            <option class="bg-surface" value="High">High</option>
+            <option class="bg-surface" value="Med">Med</option>
+            <option class="bg-surface" value="Low">Low</option>
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">Type</label>
+          <select id="editPriority" class="w-full input-glass text-on-surface rounded-xl px-4 py-3 cursor-pointer">
+            <option class="bg-surface" value="P1">🔴 Power (P1)</option>
+            <option class="bg-surface" value="P2">🟡 Focus (P2)</option>
+            <option class="bg-surface" value="P3">🟢 Quick Win (P3)</option>
+            <option class="bg-surface" value="P4">🔵 Break (P4)</option>
+            <option class="bg-surface" value="P5">⚪ Unproductive (P5)</option>
+          </select>
+        </div>
+      </div>
+      <button onclick="saveEdit()" class="synora-gradient text-on-primary text-sm font-bold rounded-xl py-3 mt-1 flex items-center justify-center gap-2 hover:opacity-90 hover:scale-[1.01] active:scale-95 transition-all shadow-[0_0_20px_rgba(76,215,246,0.25)]">
+        <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">save</span>
+        Save Changes
+      </button>
+    </div>
+  </div>
+</div>
 </body>
 </html>

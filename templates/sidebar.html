@@ -55,10 +55,6 @@
         <span class="absolute top-[2px] left-[2px] w-5 h-5 rounded-full bg-primary shadow transition-transform duration-300"></span>
       </button>
     </div>
-    <a href="/logout" class="flex items-center gap-3 px-4 py-2 rounded-xl text-on-surface-variant hover:bg-error-container/20 hover:text-error transition-all">
-      <span class="material-symbols-outlined text-[18px]">logout</span>
-      <span class="text-sm font-semibold">Logout</span>
-    </a>
   </div>
 </nav>
 
@@ -252,6 +248,26 @@
         spinner.classList.remove("hidden");
         label.textContent = "Healing...";
         closeFixModal();
+
+        /* Capture CURRENT task cards (old times) before API call */
+        var oldTasks = [];
+        var list = document.getElementById("taskList");
+        if (list) {
+          var cards = Array.prototype.slice.call(list.children).filter(function(c){ return c.tagName === "DIV"; });
+          cards.forEach(function(card) {
+            var nameEl = card.querySelector("h4");
+            var timeEl = card.querySelector(".task-time");
+            var priorityEl = card.querySelector(".priority-badge");
+            if (nameEl) {
+              oldTasks.push({
+                name: nameEl.textContent.trim(),
+                oldTime: timeEl ? timeEl.textContent.trim() : "",
+                priority: priorityEl ? priorityEl.textContent.trim() : ""
+              });
+            }
+          });
+        }
+
         fetch("/api/reschedule", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -268,7 +284,15 @@
             document.getElementById("healToastText").textContent = data.message || "Schedule healed!";
             toast.classList.remove("hidden");
             setTimeout(function () { toast.classList.add("hidden"); }, 5000);
-            if (typeof loadTasks === "function") loadTasks();
+            /* Animated task re-arrange: pass oldTasks + new schedule + cuts + dropped */
+            if (typeof animateHeal === "function") {
+              animateHeal(data.cuts || [], data.schedule || [], oldTasks, data.dropped || [], function () {
+                if (typeof loadTasks === "function") loadTasks();
+                if (typeof loadPredictedEnergy === "function") loadPredictedEnergy();
+              });
+            } else if (typeof loadTasks === "function") {
+              loadTasks();
+            }
           } else {
             window.location.href = "/dashboard";
           }

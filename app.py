@@ -65,9 +65,215 @@ def create_user(username, email, password):
         "focus_sessions": [],
         "tasks": [],
         "syllabus_plans": [],
+        # AI Learning System Data
+        "learning_data": {
+            "energy_reports": [],      # {date, hour, energy_level, source}
+            "completion_patterns": [], # {date, hour, task_type, duration, completed}
+            "focus_sessions_detailed": [], # {date, start_hour, duration_min, mode}
+            "sleep_wake": [],          # {date, sleep_time, wake_time}
+            "routine_version": 0,
+            "last_analyzed": None,
+            "personal_routine": None,
+            "energy_model": None
+        }
     }
     users_db[email] = user
     return user
+
+
+# ---------------------------------------------------------------------------
+# AI LEARNING SYSTEM — Personal Energy Predictor & Routine Generator
+# ---------------------------------------------------------------------------
+import statistics
+from collections import defaultdict, Counter
+
+def record_energy_report(user, hour, energy_level, source="manual"):
+    """Record user's energy level at a specific hour"""
+    user.setdefault("learning_data", {}).setdefault("energy_reports", []).append({
+        "date": datetime.now().strftime("%Y-%m-%d"),
+        "hour": hour,
+        "energy": energy_level,  # "Low", "Med", "High"
+        "source": source,
+        "timestamp": datetime.now().isoformat()
+    })
+
+def record_completion(user, task):
+    """Record task completion pattern"""
+    if not task.get("completed_at"):
+        return
+    try:
+        dt = datetime.fromisoformat(task["completed_at"])
+        user.setdefault("learning_data", {}).setdefault("completion_patterns", []).append({
+            "date": dt.strftime("%Y-%m-%d"),
+            "hour": dt.hour,
+            "task_type": task.get("priority", "P3"),
+            "energy": task.get("energy", "Med"),
+            "duration_min": int((datetime.fromisoformat(task.get("end_time", "18:00")).replace(year=dt.year, month=dt.month, day=dt.day) - dt).total_seconds() / 60) if task.get("end_time") else 60,
+            "completed": True
+        })
+    except:
+        pass
+
+def analyze_user_patterns(user):
+    """Analyze 3+ days of data to build personal energy model and routine"""
+    ld = user.setdefault("learning_data", {})
+    energy_reports = ld.get("energy_reports", [])
+    completions = ld.get("completion_patterns", [])
+    focus_sessions = ld.get("focus_sessions_detailed", user.get("focus_sessions", []))
+    
+    # Need at least 3 days of data
+    unique_dates = set()
+    for r in energy_reports:
+        unique_dates.add(r["date"])
+    for c in completions:
+        unique_dates.add(c["date"])
+    for f in focus_sessions:
+        if isinstance(f, dict) and f.get("date"):
+            unique_dates.add(f["date"])
+    
+    if len(unique_dates) < 3:
+        return None  # Not enough data yet
+    
+    # ---- ENERGY MODEL: Hour -> average energy (0-1 scale) ----
+    energy_map = {"Low": 0.3, "Med": 0.6, "High": 0.9}
+    hour_energy = defaultdict(list)
+    
+    for r in energy_reports:
+        hour_energy[r["hour"]].append(energy_map.get(r["energy"], 0.6))
+    
+    # Also infer from completions (completed tasks = energy was sufficient)
+    for c in completions:
+        hour_energy[c["hour"]].append(energy_map.get(c["energy"], 0.6))
+    
+    # Focus sessions = high energy
+    for f in focus_sessions:
+        if isinstance(f, dict):
+            h = f.get("start_hour") or (datetime.fromisoformat(f["date"]).hour if "T" in f.get("date", "") else 10)
+            hour_energy[h].append(0.85)
+    
+    # Build model: hour -> avg energy (0-1)
+    energy_model = {}
+    for h in range(24):
+        vals = hour_energy.get(h, [])
+        if vals:
+            energy_model[h] = statistics.mean(vals)
+        else:
+            # Fallback to circadian
+            circadian = {6:0.4,7:0.5,8:0.7,9:0.9,10:1.0,11:0.95,12:0.8,13:0.6,14:0.5,15:0.7,16:0.9,17:0.85,18:0.7,19:0.6,20:0.5,21:0.4,22:0.3}.get(h, 0.3)
+            energy_model[h] = circadian
+    
+    # ---- SLEEP/WAKE PATTERN ----
+    wake_hours = []
+    sleep_hours = []
+    for f in focus_sessions:
+        if isinstance(f, dict):
+            h = f.get("start_hour")
+            if h is not None:
+                wake_hours.append(h)
+    # Infer from first activity of day
+    daily_first_activity = defaultdict(list)
+    for c in completions:
+        daily_first_activity[c["date"]].append(c["hour"])
+    for f in focus_sessions:
+        if isinstance(f, dict) and f.get("date"):
+            d = f["date"][:10]
+            h = f.get("start_hour", 9)
+            daily_first_activity[d].append(h)
+    for d, hours in daily_first_activity.items():
+        if hours:
+            wake_hours.append(min(hours))
+    
+    avg_wake = statistics.mean(wake_hours) if wake_hours else 7
+    avg_sleep = (avg_wake + 16) % 24  # Assume 16h awake
+    
+    # ---- PRODUCTIVE WINDOWS (top energy hours) ----
+    sorted_hours = sorted(energy_model.items(), key=lambda x: x[1], reverse=True)
+    peak_hours = [h for h, e in sorted_hours[:6] if e > 0.65]  # Top 6 hours above threshold
+    
+    # ---- BUILD PERSONAL ROUTINE ----
+    routine = {
+        "wake_time": f"{int(avg_wake):02d}:00",
+        "sleep_time": f"{int(avg_sleep):02d}:00",
+        "peak_windows": [],
+        "work_blocks": [],
+        "break_times": [],
+        "generated_at": datetime.now().isoformat(),
+        "data_days": len(unique_dates)
+    }
+    
+    # Create 2-3 work blocks in peak hours
+    peak_hours.sort()
+    if peak_hours:
+        # Group consecutive peak hours into blocks
+        blocks = []
+        current = [peak_hours[0]]
+        for h in peak_hours[1:]:
+            if h == current[-1] + 1:
+                current.append(h)
+            else:
+                blocks.append(current)
+                current = [h]
+        blocks.append(current)
+        
+        for i, block in enumerate(blocks[:3]):
+            start = block[0]
+            end = block[-1] + 1
+            routine["work_blocks"].append({
+                "name": f"Deep Work Block {i+1}",
+                "start": f"{start:02d}:00",
+                "end": f"{end:02d}:00",
+                "duration_min": len(block) * 60,
+                "type": "P1" if i == 0 else "P2"
+            })
+    
+    # Add breaks between blocks
+    for i in range(len(routine["work_blocks"]) - 1):
+        curr_end = int(routine["work_blocks"][i]["end"][:2])
+        next_start = int(routine["work_blocks"][i+1]["start"][:2])
+        if next_start - curr_end >= 1:
+            routine["break_times"].append({
+                "start": f"{curr_end:02d}:00",
+                "end": f"{min(curr_end+1, next_start):02d}:00",
+                "type": "Break"
+            })
+    
+    # Save to user
+    ld["energy_model"] = energy_model
+    ld["personal_routine"] = routine
+    ld["routine_version"] = ld.get("routine_version", 0) + 1
+    ld["last_analyzed"] = datetime.now().isoformat()
+    
+    return routine
+
+def get_personal_energy_curve(user, hour):
+    """Get personalized energy for an hour (0-1 scale)"""
+    ld = user.get("learning_data", {})
+    model = ld.get("energy_model")
+    if model and hour in model:
+        return model[hour]
+    # Fallback to circadian
+    circadian = {6:0.4,7:0.5,8:0.7,9:0.9,10:1.0,11:0.95,12:0.8,13:0.6,14:0.5,15:0.7,16:0.9,17:0.85,18:0.7,19:0.6,20:0.5,21:0.4,22:0.3}.get(hour, 0.3)
+    return circadian
+
+def get_personal_routine(user):
+    """Get or generate personal routine"""
+    ld = user.get("learning_data", {})
+    routine = ld.get("personal_routine")
+    if not routine:
+        routine = analyze_user_patterns(user)
+    return routine
+
+# Auto-record on task completion
+def auto_record_completion(user, task):
+    if task.get("completed") and task.get("completed_at"):
+        record_completion(user, task)
+    # Also record energy report from task's energy field
+    if task.get("completed_at"):
+        try:
+            dt = datetime.fromisoformat(task["completed_at"])
+            record_energy_report(user, dt.hour, task.get("energy", "Med"), source="completion")
+        except:
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -203,24 +409,134 @@ def current_user():
     return users_db.get(email)
 
 
+# ---------------------------------------------------------------------------
+# Guest Auto-Login + Seed 12-Day History
+# ---------------------------------------------------------------------------
+GUEST_EMAIL = "student@synora.ai"
+
+
+def _seed_guest_history(user):
+    """Populate 12 days of realistic focus sessions and completed tasks for energy prediction"""
+    if user.get("_history_seeded"):
+        return
+    from datetime import datetime, timedelta
+    import random
+    
+    today = datetime.now().date()
+    # Realistic pattern: strong mornings (9-11), afternoon dip, evening recovery (16-19)
+    # Each entry: day_offset, focus_sessions with (seconds, mode, typical_hour), tasks_done
+    history = [
+        # Day -11 - Strong morning + evening
+        {"day_offset": 11, "focus_sessions": [
+            {"seconds": 5400, "mode": "timer", "hour": 9},
+            {"seconds": 2700, "mode": "stopwatch", "hour": 17}
+        ], "tasks_done": 4},
+        # Day -10 - Light morning
+        {"day_offset": 10, "focus_sessions": [
+            {"seconds": 1800, "mode": "timer", "hour": 10}
+        ], "tasks_done": 2},
+        # Day -9 - Missed
+        {"day_offset": 9, "focus_sessions": [], "tasks_done": 0},
+        # Day -8 - Strong morning + afternoon
+        {"day_offset": 8, "focus_sessions": [
+            {"seconds": 4200, "mode": "timer", "hour": 9},
+            {"seconds": 3600, "mode": "stopwatch", "hour": 16}
+        ], "tasks_done": 5},
+        # Day -7 - Medium morning
+        {"day_offset": 7, "focus_sessions": [
+            {"seconds": 3600, "mode": "timer", "hour": 10}
+        ], "tasks_done": 3},
+        # Day -6 - Heavy full day
+        {"day_offset": 6, "focus_sessions": [
+            {"seconds": 7200, "mode": "timer", "hour": 9},
+            {"seconds": 1800, "mode": "stopwatch", "hour": 18}
+        ], "tasks_done": 6},
+        # Day -5 - Light
+        {"day_offset": 5, "focus_sessions": [
+            {"seconds": 2100, "mode": "timer", "hour": 11}
+        ], "tasks_done": 2},
+        # Day -4 - Strong morning + evening
+        {"day_offset": 4, "focus_sessions": [
+            {"seconds": 4800, "mode": "timer", "hour": 9},
+            {"seconds": 2400, "mode": "stopwatch", "hour": 18}
+        ], "tasks_done": 4},
+        # Day -3 - Medium
+        {"day_offset": 3, "focus_sessions": [
+            {"seconds": 3300, "mode": "timer", "hour": 10}
+        ], "tasks_done": 3},
+        # Day -2 - Strong
+        {"day_offset": 2, "focus_sessions": [
+            {"seconds": 5100, "mode": "timer", "hour": 9},
+            {"seconds": 2700, "mode": "stopwatch", "hour": 17}
+        ], "tasks_done": 5},
+        # Day -1 - Medium (yesterday)
+        {"day_offset": 1, "focus_sessions": [
+            {"seconds": 3600, "mode": "timer", "hour": 10}
+        ], "tasks_done": 3},
+        # Day 0 (today) - some focus
+        {"day_offset": 0, "focus_sessions": [
+            {"seconds": 1800, "mode": "timer", "hour": 9}
+        ], "tasks_done": 1},
+    ]
+    
+    for h in history:
+        d = today - timedelta(days=h["day_offset"])
+        ds = d.strftime("%Y-%m-%d")
+        for sess in h["focus_sessions"]:
+            user.setdefault("focus_sessions", []).append({
+                "date": ds,
+                "seconds": sess["seconds"],
+                "mode": sess["mode"],
+                "hour": sess["hour"]
+            })
+        # Add completed tasks with realistic completion times
+        for i in range(h["tasks_done"]):
+            hour = random.choice([9, 10, 11, 14, 15, 16, 18, 19])
+            minute = random.choice([0, 15, 30, 45])
+            start_h = max(8, hour - 1)
+            start_m = random.choice([0, 30])
+            start_time = f"{start_h:02d}:{start_m:02d}"
+            end_time = f"{hour:02d}:{minute:02d}"
+            completed_at = f"{ds}T{hour:02d}:{minute:02d}:00"
+            user.setdefault("tasks", []).append({
+                "id": str(uuid.uuid4())[:8],
+                "name": f"Task {i+1} on {ds}",
+                "start_time": start_time,
+                "end_time": end_time,
+                "completed": True,
+                "completed_at": completed_at,
+                "priority": random.choice(["P1", "P2", "P3"]),
+                "energy": random.choice(["High", "Med", "Low"])
+            })
+    
+    user["_history_seeded"] = True
+
+
+@app.before_request
+def ensure_guest_session():
+    if GUEST_EMAIL not in users_db:
+        create_user("Student", GUEST_EMAIL, "")
+    user = users_db[GUEST_EMAIL]
+    _seed_guest_history(user)
+    if not current_user():
+        session["email"] = GUEST_EMAIL
+        session["username"] = user["username"]
+
+
 def login_required(view):
     @wraps(view)
     def wrapper(*args, **kwargs):
-        if not current_user():
-            return redirect(url_for("login"))
         return view(*args, **kwargs)
 
     return wrapper
 
 
 # ---------------------------------------------------------------------------
-# Auth Routes
+# Root Route — straight to dashboard
 # ---------------------------------------------------------------------------
 @app.route("/")
 def landing():
-    if current_user():
-        return redirect(url_for("dashboard"))
-    return render_template("landing.html")
+    return redirect(url_for("dashboard"))
 
 
 @app.route("/features")
@@ -231,50 +547,6 @@ def features():
 @app.route("/methodology")
 def methodology():
     return render_template("methodology.html", active_tab="methodology")
-
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if current_user():
-        return redirect(url_for("dashboard"))
-    if request.method == "POST":
-        email = request.form.get("email", "").strip().lower()
-        password = request.form.get("password", "")
-        user = users_db.get(email)
-        if user and user["password"] == password:
-            session["email"] = email
-            session["username"] = user["username"]
-            return redirect(url_for("dashboard"))
-        return render_template("login.html", error="Invalid email or password.")
-    return render_template("login.html")
-
-
-@app.route("/signup", methods=["GET", "POST"])
-def signup():
-    if current_user():
-        return redirect(url_for("dashboard"))
-    if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        email = request.form.get("email", "").strip().lower()
-        password = request.form.get("password", "")
-        confirm = request.form.get("confirm", "")
-        if not username or not email or not password:
-            return render_template("signup.html", error="All fields are required.")
-        if email in users_db:
-            return render_template("signup.html", error="An account with this email already exists.")
-        if password != confirm:
-            return render_template("signup.html", error="Passwords do not match.")
-        user = create_user(username, email, password)
-        session["email"] = email
-        session["username"] = username
-        return redirect(url_for("dashboard"))
-    return render_template("signup.html")
-
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("landing"))
 
 
 # ---------------------------------------------------------------------------
@@ -689,77 +961,122 @@ def api_syllabus_generate():
     if exam_date <= today:
         return jsonify({"error": "Exam date must be in the future."}), 400
     days_left = (exam_date - today).days
-    # Limit generation to 30 days for token safety; if exam is farther, generate first 30 days
-    gen_days = min(days_left, 30)
-    syllabus_snippet = syllabus[:2500]
+    # Cap planning horizon at 360 days for sanity
+    gen_days = min(days_left, 360)
+    syllabus_snippet = syllabus[:4000]
     subject_line = f'Subject focus: "{subject}" — ONLY schedule topics belonging to this subject. Ignore all other subjects.' if subject else 'Schedule across all subjects in the syllabus.'
     exam_subjects = ", ".join(EXAM_CONFIGS[exam].get("subjects", []))
-    prompt = f"""
+
+    def build_batch_prompt(batch_start, batch_end, batch_no, total_batches):
+        return f"""
 You are an expert study planner for {exam} (exam date: {exam_date_str}, subjects: {exam_subjects}). Today is {today.isoformat()}.
 {subject_line}
 Syllabus to cover:
 {syllabus_snippet}
 
 Daily study capacity: {daily_hours} hours.
-Generate a day-wise study plan for the next {gen_days} days (from {(today + timedelta(days=1)).isoformat()} to {(today + timedelta(days=gen_days)).isoformat()}).
-Distribute syllabus topics evenly, harder topics get more time, include 1 revision day per week.
+The FULL plan spans {gen_days} days ({(today + timedelta(days=1)).isoformat()} to {(today + timedelta(days=min(days_left, 360))).isoformat()}), divided into {total_batches} generation batches.
+This is batch {batch_no} of {total_batches}: generate ONLY days from {batch_start.isoformat()} to {batch_end.isoformat()} ({((batch_end - batch_start).days + 1)} days).
+Distribute the ENTIRE syllabus evenly across ALL {gen_days} days mentally, then output only this batch's slice — later batches will cover later portions. Harder topics get more days. Include 1 revision day per week.
 
 Return ONLY valid JSON array with this exact structure (no markdown, no fences, plain ASCII, no backslashes):
 [
   {{
-    "date": "YYYY-MM-DD",
+    "date": "{batch_start.isoformat()}",
     "tasks": [
       {{"name": "Topic: Subtopic", "duration": 60, "priority": "P1"}}
     ]
   }}
 ]
 Rules:
-- Each day should have 1-3 tasks, total duration per day approx {daily_hours*60} minutes (±30 min).
+- EXACTLY one entry per date from {batch_start.isoformat()} to {batch_end.isoformat()}, no skipped dates.
+- Each day: 1-3 topic tasks, total duration approx {daily_hours*60} minutes (±30 min).
+- These are DAILY TOPIC TARGETS — no clock times needed, just what to finish that day.
 - Priority P1 = hardest/most important, P2 = medium, P3 = revision/easy.
 - Use plain ASCII only, no LaTeX, no backslashes.
 - No extra text.
 """
+
+    user = current_user()
+    plan_id = str(uuid.uuid4())
+    created_tasks = []
+
+    # === CHUNKED GENERATION: batches run in PARALLEL so long plans stay fast ===
+    from concurrent.futures import ThreadPoolExecutor
+    BATCH = 40
+    batch_ranges = []
+    bs = today + timedelta(days=1)
+    while bs <= min(today + timedelta(days=gen_days), exam_date):
+        be = min(bs + timedelta(days=BATCH - 1), min(today + timedelta(days=gen_days), exam_date))
+        batch_ranges.append((bs, be))
+        bs = be + timedelta(days=1)
+    total_batches = len(batch_ranges)
+
+    def gen_batch(args):
+        bi, (b_start, b_end) = args
+        prompt = build_batch_prompt(b_start, b_end, bi + 1, total_batches)
+        for attempt in range(2):  # one retry per batch
+            try:
+                resp = _gemini_generate(prompt)
+                txt = resp.text.strip()
+                if "```" in txt:
+                    si, ei = txt.find("["), txt.rfind("]")
+                    if si != -1 and ei != -1:
+                        txt = txt[si:ei+1]
+                si, ei = txt.find("["), txt.rfind("]")
+                if si != -1 and ei != -1:
+                    txt = txt[si:ei+1]
+                try:
+                    days = json.loads(txt)
+                except json.JSONDecodeError:
+                    import re
+                    fixed = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', txt)
+                    days = json.loads(fixed)
+                if isinstance(days, list):
+                    return days
+            except Exception:
+                if attempt == 1:
+                    return []
+        return []
+
+    with ThreadPoolExecutor(max_workers=min(3, total_batches)) as pool:
+        results = list(pool.map(gen_batch, enumerate(batch_ranges)))
+
+    plan_days_all = []
+    for chunk in results:
+        plan_days_all.extend(chunk)
+
     try:
-        resp = _gemini_generate(prompt)
-        text = resp.text.strip()
-        if "```" in text:
-            s, e = text.find("["), text.rfind("]")
-            if s != -1 and e != -1:
-                text = text[s:e+1]
-        s, e = text.find("["), text.rfind("]")
-        if s != -1 and e != -1:
-            text = text[s:e+1]
-        try:
-            plan_days = json.loads(text)
-        except json.JSONDecodeError:
-            import re
-            fixed = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', text)
-            plan_days = json.loads(fixed)
-        if not isinstance(plan_days, list):
+        plan_days = plan_days_all
+        if not isinstance(plan_days, list) or not plan_days:
             raise ValueError("Invalid plan format")
-        # Create tasks
-        user = current_user()
-        plan_id = str(uuid.uuid4())
-        created_tasks = []
+
+        # Create tasks — daily targets WITHOUT fixed times
+        seen_dates = set()
         for day in plan_days:
             d = day.get("date")
-            # Validate date
+            # Validate date & dedupe (later batches could overlap boundary)
             try:
-                datetime.strptime(d, "%Y-%m-%d")
-            except:
+                dd = datetime.strptime(d, "%Y-%m-%d").date()
+            except Exception:
                 continue
-            start_hour = 9
+            if dd in seen_dates or dd > today + timedelta(days=gen_days) or dd > exam_date:
+                continue
+            seen_dates.add(dd)
             for t in day.get("tasks", [])[:3]:
                 name = (t.get("name") or "Study").strip()[:120]
-                dur = max(30, min(180, int(t.get("duration", 60))))
+                try:
+                    dur = max(30, min(240, int(t.get("duration", 60))))
+                except (TypeError, ValueError):
+                    dur = 60
                 prio = t.get("priority") if t.get("priority") in ("P1","P2","P3") else "P2"
-                end_hour = start_hour + dur // 60
-                end_min = dur % 60
                 task = {
                     "id": str(uuid.uuid4()),
                     "name": name,
-                    "start_time": f"{start_hour:02d}:00",
-                    "end_time": f"{end_hour:02d}:{end_min:02d}",
+                    "start_time": "09:00",
+                    "end_time": "18:00",
+                    "no_time": True,
+                    "duration": dur,
                     "energy": "High" if prio=="P1" else "Med" if prio=="P2" else "Low",
                     "priority": prio,
                     "completed": False,
@@ -770,10 +1087,6 @@ Rules:
                 }
                 user["tasks"].append(task)
                 created_tasks.append(task)
-                # Next slot
-                start_hour = end_hour + 1
-                if start_hour >= 18:
-                    start_hour = 9
         plan = {
             "id": plan_id,
             "exam": exam,
@@ -933,14 +1246,42 @@ def api_add_task():
     return jsonify({"task": task}), 201
 
 
+@app.route("/api/tasks/<task_id>", methods=["PUT"])
+@login_required
+def api_update_task(task_id):
+    data = request.get_json(silent=True) or {}
+    for task in user_tasks():
+        if task["id"] == task_id:
+            if "name" in data and (data.get("name") or "").strip():
+                task["name"] = data["name"].strip()[:120]
+            if "start_time" in data and data.get("start_time"):
+                task["start_time"] = data["start_time"]
+            if "end_time" in data and data.get("end_time"):
+                task["end_time"] = data["end_time"]
+            if "energy" in data and data.get("energy") in ("High", "Med", "Low"):
+                task["energy"] = data["energy"]
+            if "priority" in data and data.get("priority") in ("P1", "P2", "P3", "P4", "P5"):
+                task["priority"] = data["priority"]
+            if "date" in data and data.get("date"):
+                try:
+                    datetime.strptime(data["date"], "%Y-%m-%d")
+                    task["date"] = data["date"]
+                except ValueError:
+                    pass
+            return jsonify({"task": task})
+    return jsonify({"error": "Task not found."}), 404
+
+
 @app.route("/api/tasks/<task_id>/complete", methods=["POST"])
 @login_required
 def api_toggle_task(task_id):
+    user = current_user()
     for task in user_tasks():
         if task["id"] == task_id:
             task["completed"] = not task["completed"]
             if task["completed"]:
                 task["completed_at"] = datetime.now().isoformat()
+                auto_record_completion(user, task)
             else:
                 task.pop("completed_at", None)
             return jsonify({"task": task})
@@ -1005,103 +1346,358 @@ def pick_taunt(wasted):
 @app.route("/api/reschedule", methods=["POST"])
 @login_required
 def api_reschedule():
-    """AI 'healing' endpoint: user reports wasted time, AI replans the rest of the day."""
+    """
+    Smart AI Reschedule:
+    - Takes user's todo list (tasks with priorities, durations, preferred times)
+    - AI predicts energy levels throughout the day
+    - Creates optimal schedule matching energy peaks to high-priority work
+    - On reschedule: AI redesigns based on current energy + missed tasks
+    """
     data = request.get_json(silent=True) or {}
+    
+    # User inputs
     energy = data.get("current_energy")
     if energy in {"Low Energy", "Active", "Peak Focus"}:
         current_user()["current_energy"] = energy
+    
+    wasted = 0
     try:
         wasted = max(0, min(600, int(data.get("wasted_minutes", 0) or 0)))
     except (TypeError, ValueError):
         wasted = 0
-
+    
+    # Custom todo list from user (optional override)
+    user_tasks_override = data.get("tasks")  # list of {name, duration, priority, preferred_start}
+    
     user = current_user()
     now = datetime.now().replace(second=0, microsecond=0)
-    incomplete = [t for t in user["tasks"] if not t["completed"]]
+    
+    # Get incomplete tasks (use override if provided, else existing tasks)
+    if user_tasks_override:
+        incomplete = user_tasks_override
+    else:
+        incomplete = [t for t in user["tasks"] if not t.get("completed")]
+    
+    # Only consider future, non-syllabus tasks (syllabus plans heal separately)
     remaining = [
-        t for t in incomplete if _hm_to_dt(t["end_time"], now) > now
+        t for t in incomplete
+        if _hm_to_dt(t.get("end_time", "23:59"), now) > now and not t.get("is_syllabus")
     ]
-
+    
     if not remaining:
-        return jsonify(
-            {
-                "message": "Nothing left to heal — you're all done for today!",
-                "healed": 0,
-                "dropped": [],
-                "taunt": pick_taunt(wasted),
-                "wasted_minutes": wasted,
-            }
-        )
+        return jsonify({
+            "message": "Nothing left to heal - you're all done for today!",
+            "healed": 0,
+            "dropped": [],
+            "taunt": pick_taunt(wasted),
+            "wasted_minutes": wasted,
+            "schedule": []
+        })
 
     # Working window: from now (plus wasted time) until 22:00
     window_end = now.replace(hour=22, minute=0, second=0, microsecond=0)
     start = now + timedelta(minutes=wasted)
     if start >= window_end:
-        return jsonify(
-            {
-                "message": "The day is basically over — even AI can't create time from nothing.",
-                "healed": 0,
-                "dropped": [t["name"] for t in remaining],
-                "taunt": pick_taunt(wasted),
-                "wasted_minutes": wasted,
-            }
-        )
+        return jsonify({
+            "message": "The day is basically over - even AI can't create time from nothing.",
+            "healed": 0,
+            "dropped": [t["name"] for t in remaining],
+            "taunt": pick_taunt(wasted),
+            "wasted_minutes": wasted,
+            "schedule": []
+        })
+    
     available = (window_end - start).total_seconds() / 60.0
-
-    # Priority order: P1 (Power Task) first, then P2, then P3
-    rank = {"P1": 0, "P2": 1, "P3": 2}
-    kept = sorted(remaining, key=lambda t: (rank.get(t["priority"], 1), t["start_time"]))
+    
+    # Priority order: P1 Power > P2 Focus > P3 Quick Win > P4 Break > P5 Unproductive
+    rank = {"P1": 0, "P2": 1, "P3": 2, "P4": 3, "P5": 4}
+    kept = sorted(remaining, key=lambda t: (rank.get(t.get("priority", "P3"), 2), t.get("start_time", "00:00")))
+    
+    # AI PREDICTED ENERGY CURVE for the day (based on circadian rhythm + user's current energy)
+    def predict_energy_curve(current_energy, hours_from_now):
+        """Returns energy multiplier 0.5-1.5 for each hour slot"""
+        hour = (datetime.now().hour + hours_from_now) % 24
+        # Base circadian rhythm (peaks at 10AM, 4PM; dips at 2PM, 10PM)
+        circadian = {
+            6: 0.6, 7: 0.7, 8: 0.9, 9: 1.1, 10: 1.2, 11: 1.15,
+            12: 0.9, 13: 0.75, 14: 0.65, 15: 0.8, 16: 1.1, 17: 1.05,
+            18: 0.9, 19: 0.8, 20: 0.7, 21: 0.6
+        }.get(hour, 0.5)
+        
+        # Current energy modifier
+        energy_mod = {"Low Energy": 0.85, "Active": 1.0, "Peak Focus": 1.15}.get(user.get("current_energy", "Active"), 1.0)
+        
+        return min(1.5, max(0.4, circadian * energy_mod))
+    
+    # Calculate demand
     demand = sum(
-        (_hm_to_dt(t["end_time"], now) - _hm_to_dt(t["start_time"], now)).total_seconds() / 60.0
+        (_hm_to_dt(t.get("end_time", "23:59"), now) - _hm_to_dt(t.get("start_time", "00:00"), now)).total_seconds() / 60.0
         for t in kept
     )
 
-    dropped = []
-    if demand > available:
-        # Drop the least important tasks (lowest priority first, longest last)
-        for t in sorted(kept, key=lambda t: (-rank.get(t["priority"], 1), t["start_time"])):
-            d = (_hm_to_dt(t["end_time"], now) - _hm_to_dt(t["start_time"], now)).total_seconds() / 60.0
-            if demand - d >= available:
-                demand -= d
-                dropped.append(t["name"])
-                kept.remove(t)
-                continue
-        # If still over, compress everything proportionally
-        if demand > available:
-            ratio = available / demand
-            for t in kept:
-                d = (_hm_to_dt(t["end_time"], now) - _hm_to_dt(t["start_time"], now)).total_seconds() / 60.0
-                t["end_time"] = _dt_to_hm(_hm_to_dt(t["start_time"], now) + timedelta(minutes=max(15, round(d * ratio))))
+    # === SMART TIME-CUTTING: recover wasted minutes by compressing low-priority tasks ===
+    # Order: Unproductive (P5, cut up to 70%) -> Breaks (P4, up to 50%) -> Quick Wins (P3, up to 30%)
+    deficit = max(0.0, demand - available)
+    cuts = []  # [{name, priority, before, after}] for animation
+    compression_plan = [("P5", 0.70), ("P4", 0.50), ("P3", 0.30)]
 
-    # Re-slot tasks back-to-back into the remaining window
+    if deficit > 0:
+        for prio, cut_ratio in compression_plan:
+            if deficit <= 0:
+                break
+            prio_tasks = sorted(
+                [t for t in kept if t.get("priority") == prio],
+                key=lambda t: (_hm_to_dt(t["end_time"], now) - _hm_to_dt(t["start_time"], now)).total_seconds(),
+                reverse=True,  # longest first — bigger cuts recover faster
+            )
+            for task in prio_tasks:
+                if deficit <= 0:
+                    break
+                orig_dur = (_hm_to_dt(task["end_time"], now) - _hm_to_dt(task["start_time"], now)).total_seconds() / 60.0
+                min_dur = 15.0
+                max_recoverable = max(0.0, orig_dur - min_dur) * cut_ratio
+                actual_cut = min(deficit, max_recoverable)
+                if actual_cut < 5:  # not worth cutting less than 5 min
+                    continue
+                new_dur = orig_dur - actual_cut
+                task["end_time"] = _dt_to_hm(_hm_to_dt(task["start_time"], now) + timedelta(minutes=new_dur))
+                task["_cut"] = True
+                deficit -= actual_cut
+                demand -= actual_cut
+                emoji = {"P5": "⚪", "P4": "🔵", "P3": "🟢"}.get(prio, "")
+                label = {"P5": "Unproductive", "P4": "Break", "P3": "Quick Win"}.get(prio, prio)
+                cuts.append({
+                    "name": task["name"],
+                    "priority": prio,
+                    "label": label,
+                    "emoji": emoji,
+                    "before": round(orig_dur),
+                    "after": round(new_dur),
+                    "saved": round(actual_cut),
+                })
+
+    # AI SMART SCHEDULING — full productive redesign of the rest of the day
+    # Strategy:
+    #   Phase A: WORK tasks (P1/P2) placed at best ENERGY-matched windows (earliness-biased)
+    #   Phase B: LIGHT/BREAK/UNPROD tasks fill remaining gaps CHRONOLOGICALLY
+    #   Phase C: compaction — pull everything tight, no dead time
+    #   Phase D: persist healed timetable onto user's real tasks
+
+    slots = []
     cursor = start
-    healed = 0
-    for t in kept:
-        dur = (_hm_to_dt(t["end_time"], now) - _hm_to_dt(t["start_time"], now)).total_seconds() / 60.0
-        t["start_time"] = _dt_to_hm(cursor)
-        t["end_time"] = _dt_to_hm(cursor + timedelta(minutes=max(15, round(dur))))
-        cursor += timedelta(minutes=max(15, round(dur)))
-        t["healed"] = True
-        healed += 1
+    slot_idx = 0
+    while cursor + timedelta(minutes=15) <= window_end:
+        slots.append({
+            "start": cursor,
+            "energy": predict_energy_curve(user.get("current_energy", "Active"), slot_idx),
+            "hour": cursor.hour
+        })
+        cursor += timedelta(minutes=15)
+        slot_idx += 0.25
 
-    parts = [f"Day healed! {healed} task(s) replanned into your remaining window."]
-    if dropped:
-        parts.append(f"{len(dropped)} light task(s) dropped to make room: {', '.join(dropped)}.")
-    parts.append("Highest-priority work now sits exactly where you'll do it best.")
+    req_energy_map = {"P1": 1.15, "P2": 1.0, "P3": 0.85, "P4": 0.6, "P5": 0.5}
+
+    def task_duration(t):
+        d = (_hm_to_dt(t.get("end_time", "23:59"), now) - _hm_to_dt(t.get("start_time", "00:00"), now)).total_seconds() / 60.0
+        return max(15, round(d))
+
+    def required_energy(t):
+        prio = t.get("priority", "P3")
+        e = req_energy_map.get(prio, 0.85)
+        te = t.get("energy", "")
+        if te == "High":
+            e = max(e, 1.1)
+        elif te == "Low":
+            e = min(e, 0.7)
+        return e
+
+    used = [False] * len(slots)
+
+    def place_best(task):
+        """Energy-match placement with earliness bias. Returns index or -1."""
+        dur = task_duration(task)
+        needed = max(1, round(dur / 15))
+        req_e = required_energy(task)
+        prio = task.get("priority", "P3")
+        pw = 5 - rank.get(prio, 2)
+        best_score, best_i = -1e9, -1
+        for i in range(len(slots) - needed + 1):
+            if any(used[i + j] for j in range(needed)):
+                continue
+            avg_e = sum(slots[i + j]["energy"] for j in range(needed)) / needed
+            match = max(0.3, 1.0 - abs(avg_e - req_e) * 1.5)
+            earliness = (len(slots) - i) / len(slots)  # prefer sooner slots -> compact day
+            score = avg_e * pw * match + earliness * 0.6
+            if score > best_score:
+                best_score, best_i = score, i
+        if best_i == -1:
+            return -1
+        for j in range(needed):
+            used[best_i + j] = True
+        return best_i
+
+    def place_earliest(task, from_idx=0):
+        """Chronological first-fit into free gaps (from from_idx onward). Returns index or -1."""
+        dur = task_duration(task)
+        needed = max(1, round(dur / 15))
+        for scan_start in (from_idx, 0):
+            i = scan_start
+            while i <= len(slots) - needed:
+                if any(used[i + j] for j in range(needed)):
+                    i += 1
+                    continue
+                for j in range(needed):
+                    used[i + j] = True
+                return i
+            i += 1
+        return -1
+
+    work = [t for t in kept if rank.get(t.get("priority", "P3"), 2) <= 1]
+    light = [t for t in kept if rank.get(t.get("priority", "P3"), 2) >= 2]
+
+    # Phase A: hardest/longest work first -> grabs peak-energy windows
+    placed = {}  # id -> (start_dt, end_dt, dur)
+    dropped = []
+    for t in sorted(work, key=lambda x: (-task_duration(x), required_energy(x)), reverse=False):
+        idx = place_best(t)
+        if idx == -1:
+            dropped.append(t)
+            continue
+        dur = task_duration(t)
+        s = slots[idx]["start"]
+        placed[t["id"]] = (s, min(s + timedelta(minutes=dur), window_end), dur)
+
+    # Phase B: light/break/unprod tasks fill gaps around the work blocks
+    work_start_idx = None
+    if placed:
+        first_work_start = min(v[0] for v in placed.values())
+        for i, sl in enumerate(slots):
+            if sl["start"] >= first_work_start:
+                work_start_idx = i
+                break
+    for t in sorted(light, key=lambda x: (rank.get(x.get("priority", "P3"), 2),)):
+        idx = place_earliest(t, work_start_idx or 0)
+        if idx == -1:
+            dropped.append(t)
+            continue
+        dur = task_duration(t)
+        s = slots[idx]["start"]
+        placed[t["id"]] = (s, min(s + timedelta(minutes=dur), window_end), dur)
+
+    # Phase C: compaction — pull tasks earlier INTO ORDER (no jumping ahead of prior task)
+    timeline = sorted(placed.items(), key=lambda kv: kv[1][0])
+    occupied = []  # finalized (start,end)
+
+    def fits(st, en):
+        return all(en <= os or st >= oe for os, oe in occupied)
+
+    def zone_energy(a, b):
+        vals = [sl["energy"] for sl in slots if a <= sl["start"] < b]
+        return sum(vals) / len(vals) if vals else 0.5
+
+    prev_end = start
+    for tid, (s, e, dur) in timeline:
+        t_obj = next((x for x in kept if x["id"] == tid), None)
+        is_work = t_obj is not None and rank.get(t_obj.get("priority", "P3"), 2) <= 1
+        orig_zone = zone_energy(s, e)
+        cand = max(start, prev_end)
+        while cand + timedelta(minutes=dur) <= e:
+            ce = cand + timedelta(minutes=dur)
+            if fits(cand, ce):
+                # work tasks never slide into notably weaker energy zones
+                if is_work and zone_energy(cand, ce) + 0.15 < orig_zone:
+                    cand += timedelta(minutes=15)
+                    continue
+                s, e = cand, ce
+                break
+            cand += timedelta(minutes=15)
+        occupied.append((s, e))
+        prev_end = e
+        placed[tid] = (s, e, dur)
+
+    # Build response schedule
+    schedule = []
+    for t in kept:
+        if t["id"] in placed:
+            s, e, dur = placed[t["id"]]
+            zs = [sl["energy"] for sl in slots if s <= sl["start"] < e]
+            schedule.append({
+                "id": t["id"],
+                "name": t["name"],
+                "start_time": _dt_to_hm(s),
+                "end_time": _dt_to_hm(e),
+                "priority": t.get("priority", "P3"),
+                "energy_slot": round(sum(zs) / len(zs), 2) if zs else 0.5,
+                "healed": True,
+                "duration": dur
+            })
+    dropped = [t["name"] for t in dropped]
+
+    # chronological order for display
+    schedule.sort(key=lambda x: x["start_time"])
+
+    # === PHASE D: PERSIST — the timetable actually shifts on the dashboard ===
+    dropped_id_set = {t["id"] for t in kept if t["id"] not in placed}
+    sched_by_id = {s["id"]: s for s in schedule}
+    cut_by_name = {c["name"]: c for c in cuts}
+    new_tasks = []
+    for t in user["tasks"]:
+        if t.get("completed"):
+            new_tasks.append(t)
+            continue
+        tid = t.get("id")
+        if tid in dropped_id_set and _hm_to_dt(t.get("end_time", "23:59"), now) > now:
+            continue  # AI dropped this future task
+        if tid in sched_by_id:
+            s = sched_by_id[tid]
+            t["start_time"] = s["start_time"]
+            t["end_time"] = s["end_time"]
+            t["healed"] = True
+        elif t.get("_cut"):
+            t["healed"] = True
+        new_tasks.append(t)
+    user["tasks"] = new_tasks
 
     taunt = pick_taunt(wasted)
     user["last_taunt"] = taunt
 
-    return jsonify(
-        {
-            "message": " ".join(parts),
-            "healed": healed,
-            "dropped": dropped,
-            "taunt": taunt,
-            "wasted_minutes": wasted,
-            "current_energy": user["current_energy"],
-        }
-    )
+    # If a trimmed task still didn't fit, report it as dropped only (not both)
+    dropped_names = set(dropped)
+    cuts = [c for c in cuts if c["name"] not in dropped_names]
+
+    # Smart message describing what was cut
+    parts = []
+    if cuts:
+        total_saved = sum(c["saved"] for c in cuts)
+        cut_desc = ", ".join(f"{c['emoji']} {c['name']} ({c['before']}m to {c['after']}m)" for c in cuts)
+        parts.append(f"Recovered {round(total_saved)} min by trimming: {cut_desc}.")
+    if dropped:
+        parts.append(f"Dropped (couldn't fit): {', '.join(dropped)}.")
+    parts.append(f"{len(schedule)} tasks matched to your best energy windows.")
+
+    return jsonify({
+        "message": "AI optimized your day! " + " ".join(parts),
+        "healed": len(schedule),
+        "dropped": dropped,
+        "cuts": cuts,
+        "taunt": pick_taunt(wasted),
+        "wasted_minutes": wasted,
+        "current_energy": user.get("current_energy", "Active"),
+        "schedule": schedule,
+        "energy_curve": [{"hour": s["hour"], "energy": round(s["energy"], 2)} for s in slots]
+    })
+
+
+def pick_taunt(wasted):
+    if wasted <= 0:
+        return random.choice(TAUNTS_ZERO)
+    if wasted <= 15:
+        return random.choice(TAUNTS_LIGHT)
+    if wasted <= 45:
+        return random.choice(TAUNTS_MED)
+    if wasted <= 120:
+        return random.choice(TAUNTS_HEAVY)
+    return random.choice(TAUNTS_EXTREME)
 
 
 @app.route("/api/focus/record", methods=["POST"])
@@ -1218,25 +1814,67 @@ def api_streak():
 @login_required
 def api_predicted_energy():
     user = current_user()
-    base = [40, 90, 75, 30, 50, 60]
     hours = ["8AM", "10AM", "12PM", "2PM", "4PM", "6PM"]
-    # Deterministic daily offset per user (0-10) so chart feels personal but stable for the day
-    email = user.get("email", "")
-    today_str = datetime.now().strftime("%Y-%m-%d")
-    seed = sum(ord(c) for c in (email + today_str)) % 100
-    # Current energy modifier
+    hour_map = {"8AM": 8, "10AM": 10, "12PM": 12, "2PM": 14, "4PM": 16, "6PM": 18}
+    
+    # 1. Personal energy model (learned from user patterns)
+    personal_vals = {}
+    for label, h in hour_map.items():
+        personal_vals[label] = int(get_personal_energy_curve(user, h) * 100)
+    
+    # 2. Focus-session based model (existing)
+    hour_windows = {
+        "8AM": (7, 9),    "10AM": (9, 11),  "12PM": (11, 13),
+        "2PM": (13, 15),  "4PM": (15, 17),  "6PM": (17, 19)
+    }
+    focus_by_hour = {h: [] for h in hours}
+    for sess in user.get("focus_sessions", []):
+        h = sess.get("hour")
+        if h is None: continue
+        for label, (start, end) in hour_windows.items():
+            if start <= h < end:
+                focus_by_hour[label].append(sess.get("seconds", 0))
+                break
+    
+    focus_vals = {}
+    max_avg = 1
+    for label in hours:
+        secs = focus_by_hour[label]
+        if secs:
+            avg_min = sum(secs) / len(secs) / 60.0
+        else:
+            avg_min = 0
+        focus_vals[label] = avg_min
+        max_avg = max(max_avg, avg_min)
+    
+    for label in hours:
+        if max_avg > 0:
+            focus_vals[label] = int((focus_vals[label] / max_avg) * 80 + 15)
+        else:
+            focus_vals[label] = 40
+    
+    # Blend: 70% personal model, 30% focus sessions (personal model is more reliable with 3+ days)
+    ld = user.get("learning_data", {})
+    has_personal = bool(ld.get("energy_model"))
+    blend_weight = 0.7 if has_personal else 0.3
+    
+    values = []
     ce = user.get("current_energy", "Active")
     mod = {"Low Energy": -12, "Active": 0, "Peak Focus": 10}.get(ce, 0)
-    # Activity boost: +5 if streak >2, +3 if any focus today
     active = _get_active_dates(user)
     streak_boost = 5 if len([d for d in active if d >= (datetime.now() - timedelta(days=3)).strftime("%Y-%m-%d")]) >= 3 else 0
-    values = []
-    for i, b in enumerate(base):
-        # pseudo-random per bar
-        jitter = ((seed + i * 17) % 11) - 5  # -5..+5
-        v = max(12, min(98, b + mod + jitter + streak_boost))
-        values.append({"hour": hours[i], "value": v, "label": hours[i].replace("M", " M")})
-    return jsonify({"hours": values, "current_energy": ce})
+    
+    for label in hours:
+        blended = blend_weight * personal_vals[label] + (1 - blend_weight) * focus_vals[label]
+        v = max(12, min(98, blended + mod + streak_boost))
+        values.append({"hour": label, "value": round(v), "label": label.replace("M", " M")})
+    
+    return jsonify({
+        "hours": values, 
+        "current_energy": ce,
+        "personal_model_active": has_personal,
+        "data_days": len(set(r["date"] for r in user.get("learning_data", {}).get("energy_reports", [])))
+    })
 
 
 @app.route("/api/energy", methods=["GET"])
@@ -1259,8 +1897,116 @@ def api_energy_set():
     return jsonify({"current_energy": level})
 
 
+@app.route("/api/tasks", methods=["DELETE"])
+@login_required
+def api_tasks_clear():
+    """Delete all tasks for the current user."""
+    user = current_user()
+    user["tasks"] = []
+    return jsonify({"ok": True, "message": "All tasks cleared"})
+
+
+@app.route("/api/focus/record", methods=["DELETE"])
+@login_required
+def api_focus_clear():
+    user = current_user()
+    user["focus_sessions"] = []
+    return jsonify({"ok": True, "message": "Focus sessions cleared"})
+
+
+@app.route("/api/quiz/history", methods=["DELETE"])
+@login_required
+def api_quiz_history_clear():
+    user = current_user()
+    user["quiz_history"] = []
+    return jsonify({"ok": True, "message": "Quiz history cleared"})
+
+
+@app.route("/api/syllabus/plans", methods=["DELETE"])
+@login_required
+def api_syllabus_plans_clear():
+    user = current_user()
+    user["syllabus_plans"] = []
+    # Also delete associated tasks
+    user["tasks"] = [t for t in user["tasks"] if not t.get("is_syllabus")]
+    return jsonify({"ok": True, "message": "All plans cleared"})
+
+
+@app.route("/api/streak", methods=["DELETE"])
+@login_required
+def api_streak_clear():
+    user = current_user()
+    user.pop("last_taunt", None)
+    return jsonify({"ok": True, "message": "Streak data cleared"})
+
+
+# ===== AI LEARNING ENDPOINTS =====
+
+@app.route("/api/learning/energy-curve", methods=["GET"])
+@login_required
+def api_learning_energy_curve():
+    """Get 24-hour personal energy curve"""
+    user = current_user()
+    curve = []
+    for h in range(24):
+        energy = get_personal_energy_curve(user, h)
+        curve.append({"hour": h, "energy": round(energy, 2), "label": f"{h:02d}:00"})
+    return jsonify({
+        "curve": curve,
+        "model_active": bool(user.get("learning_data", {}).get("energy_model")),
+        "data_days": len(set(r["date"] for r in user.get("learning_data", {}).get("energy_reports", [])))
+    })
+
+
+@app.route("/api/learning/routine", methods=["GET"])
+@login_required
+def api_learning_routine():
+    """Get personal routine (generates if enough data)"""
+    user = current_user()
+    routine = get_personal_routine(user)
+    if not routine:
+        return jsonify({
+            "routine": None,
+            "message": "Need 3+ days of data. Complete tasks and report energy to build your routine!",
+            "days_collected": len(set(r["date"] for r in user.get("learning_data", {}).get("energy_reports", [])))
+        })
+    return jsonify({"routine": routine})
+
+
+@app.route("/api/learning/report-energy", methods=["POST"])
+@login_required
+def api_learning_report_energy():
+    """Manual energy report from user"""
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    energy = data.get("energy")
+    hour = data.get("hour", datetime.now().hour)
+    if energy not in ("Low", "Med", "High"):
+        return jsonify({"error": "Invalid energy level"}), 400
+    record_energy_report(user, hour, energy, source="manual")
+    return jsonify({"ok": True, "message": f"Recorded {energy} energy at {hour}:00"})
+
+
+@app.route("/api/learning/status", methods=["GET"])
+@login_required
+def api_learning_status():
+    """Get learning system status"""
+    user = current_user()
+    ld = user.get("learning_data", {})
+    reports = ld.get("energy_reports", [])
+    unique_dates = len(set(r["date"] for r in reports))
+    return jsonify({
+        "model_trained": bool(ld.get("energy_model")),
+        "days_of_data": len(set(r["date"] for r in reports)),
+        "total_reports": len(reports),
+        "routine_version": ld.get("routine_version", 0),
+        "last_analyzed": ld.get("last_analyzed"),
+        "ready_for_routine": len(set(r["date"] for r in reports)) >= 3
+    })
+
+
 if __name__ == "__main__":
     import os
 
-    port = int(os.environ.get("SYNORA_PORT", 5000))
-    app.run(debug=True, port=port)
+    port = int(os.environ.get("PORT", os.environ.get("SYNORA_PORT", 5000)))
+    app.run(debug=True, host="0.0.0.0", port=port, use_reloader=False)

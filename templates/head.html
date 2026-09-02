@@ -121,16 +121,40 @@
       radial-gradient(circle at 60% 40%, rgba(111, 0, 190, 0.06) 0%, transparent 50%);
   }
 
+  html {
+    color-scheme: dark;
+  }
+  html:not(.dark) {
+    color-scheme: light;
+  }
+
   .input-glass {
     background: rgba(25, 28, 29, 0.8);
     border: 1px solid rgba(138, 147, 140, 0.3);
     transition: all 0.3s ease;
+    color-scheme: dark;
   }
   .input-glass:focus-within {
     border-color: #9ad3b6;
     box-shadow: 0 0 0 1px #9ad3b6, 0 0 18px rgba(154, 211, 182, 0.15);
   }
-  html:not(.dark) .input-glass { background: rgba(255,255,255,0.85); }
+  html:not(.dark) .input-glass { background: rgba(255,255,255,0.85); color-scheme: light; }
+  input[type="date"], input[type="time"],
+  select.input-glass {
+    color-scheme: dark;
+    color: #e1e3e4 !important;
+    background-color: rgba(25, 28, 29, 0.9) !important;
+  }
+  html:not(.dark) input[type="date"], html:not(.dark) input[type="time"] {
+    color-scheme: light;
+    color: #111415;
+    background-color: rgba(255,255,255,0.85);
+  }
+  input[type="date"]::-webkit-calendar-picker-indicator,
+  input[type="time"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+    cursor: pointer;
+  }
 
   .btn-gradient {
     background: linear-gradient(135deg, #9ad3b6 0%, #b6efd1 100%);

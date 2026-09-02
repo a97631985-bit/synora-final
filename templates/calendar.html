@@ -61,15 +61,20 @@
   <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeEventModal()"></div>
   <div class="relative glass-strong rounded-3xl p-8 w-full max-w-md shadow-2xl">
     <div class="flex items-center justify-between mb-6">
-      <h3 class="text-lg font-bold">Add Event</h3>
+      <h3 id="eventModalTitle" class="text-lg font-bold">Add Event</h3>
       <button onclick="closeEventModal()" class="w-8 h-8 rounded-full bg-surface-container flex items-center justify-center text-on-surface-variant hover:text-on-surface transition-colors">
         <span class="material-symbols-outlined">close</span>
       </button>
     </div>
     <form id="eventForm" class="flex flex-col gap-4">
+      <input type="hidden" id="eEditId" value="">
       <div>
         <label class="text-sm font-semibold text-on-surface-variant mb-1 block">Event Name</label>
         <input id="eName" class="w-full input-glass text-on-surface rounded-xl px-4 py-3 placeholder-outline-variant" placeholder="E.g., Group Study — DBMS" required>
+      </div>
+      <div>
+        <label class="text-sm font-semibold text-on-surface-variant mb-1 block">Date</label>
+        <input id="eDate" type="date" class="w-full input-glass text-on-surface rounded-xl px-4 py-3" required>
       </div>
       <div class="grid grid-cols-2 gap-4">
         <div>
@@ -93,13 +98,15 @@
         <div>
           <label class="text-sm font-semibold text-on-surface-variant mb-1 block">Priority</label>
           <select id="ePriority" class="w-full input-glass text-on-surface rounded-xl px-4 py-3 cursor-pointer">
-            <option class="bg-surface text-on-surface" value="P1">P1</option>
-            <option class="bg-surface text-on-surface" value="P2" selected>P2</option>
-            <option class="bg-surface text-on-surface" value="P3">P3</option>
+            <option class="bg-surface text-on-surface" value="P1">🔴 P1 Power</option>
+            <option class="bg-surface text-on-surface" value="P2" selected>🟡 P2 Focus</option>
+            <option class="bg-surface text-on-surface" value="P3">🟢 P3 Quick Win</option>
+            <option class="bg-surface text-on-surface" value="P4">🔵 P4 Break</option>
+            <option class="bg-surface text-on-surface" value="P5">⚪ P5 Unproductive</option>
           </select>
         </div>
       </div>
-      <button type="submit" class="synora-gradient text-on-primary font-semibold rounded-xl py-3 mt-2 hover:opacity-90 hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center gap-2">
+      <button type="submit" id="eventSubmitBtn" class="synora-gradient text-on-primary font-semibold rounded-xl py-3 mt-2 hover:opacity-90 hover:scale-[1.01] active:scale-95 transition-all flex items-center justify-center gap-2">
         <span class="material-symbols-outlined text-[18px]" style="font-variation-settings: 'FILL' 1;">add_circle</span>
         Add Event
       </button>
@@ -107,17 +114,51 @@
   </div>
 </div>
 
+<!-- ===== Day Timetable Modal ===== -->
+<div id="dayModal" class="fixed inset-0 z-[60] hidden items-center justify-center p-5">
+  <div class="absolute inset-0 bg-black/60 backdrop-blur-sm" onclick="closeDayModal()"></div>
+  <div class="relative glass-strong rounded-3xl p-6 w-full max-w-lg shadow-2xl max-h-[85vh] flex flex-col">
+    <div class="flex items-center justify-between mb-1">
+      <h3 id="dayModalTitle" class="text-xl font-bold"></h3>
+      <button onclick="closeDayModal()" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-white/10 hover:text-on-surface transition-all">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <p id="dayModalSub" class="text-xs text-on-surface-variant mb-4"></p>
+    <div id="dayTaskList" class="space-y-2 overflow-y-auto pr-1 mb-4"></div>
+    <button onclick="openAddForSelectedDay()" class="synora-gradient text-on-primary text-sm font-bold rounded-xl py-3 mt-auto flex items-center justify-center gap-2 hover:opacity-90 hover:scale-[1.01] active:scale-95 transition-all shadow-[0_0_20px_rgba(76,215,246,0.25)]">
+      <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">add</span>
+      Add Task to This Day
+    </button>
+  </div>
+</div>
+
 <script>
 var viewDate = new Date();
 viewDate.setDate(1);
 var allTasks = [];
+var selectedDayKey = null;
+var editingEventId = null;
 
 var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
 var DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
+function pad2(n){ return (n < 10 ? "0" : "") + n; }
+function keyFor(y, m, d){ return y + "-" + pad2(m + 1) + "-" + pad2(d); }
+function todayKey(){ var t = new Date(); return keyFor(t.getFullYear(), t.getMonth(), t.getDate()); }
+
 function closeEventModal() {
   var m = document.getElementById("eventModal");
   m.classList.add("hidden"); m.classList.remove("flex");
+}
+
+function tasksOn(key) {
+  return allTasks.filter(function(t){ return t.date === key; })
+    .sort(function(a,b){ return (a.start_time||"").localeCompare(b.start_time||""); });
+}
+
+function prioDot(p){
+  return p === "P1" ? "🔴" : p === "P3" ? "🟢" : p === "P4" ? "🔵" : p === "P5" ? "⚪" : "🟡";
 }
 
 function taskChip(t) {
@@ -127,7 +168,7 @@ function taskChip(t) {
       ? "bg-tertiary-container/25 text-tertiary border-tertiary/40"
       : "bg-primary-container/40 text-on-primary-container border-primary/40";
   var icon = t.completed ? "check_circle" : t.healed ? "auto_fix_normal" : "task_alt";
-  return '<div class="' + cls + ' border rounded-lg px-1.5 py-0.5 text-[10px] font-semibold truncate flex items-center gap-1" title="' + t.name + ' (' + t.start_time + ' - ' + t.end_time + ')">'
+  return '<div class="' + cls + ' border rounded-lg px-1.5 py-0.5 text-[10px] font-semibold truncate flex items-center gap-1" title="' + t.name + '">'
     + '<span class="material-symbols-outlined text-[11px] shrink-0">' + icon + '</span>'
     + '<span class="truncate">' + t.name + '</span></div>';
 }
@@ -137,10 +178,10 @@ function renderCalendar() {
   var label = document.getElementById("monthLabel");
   label.textContent = MONTHS[viewDate.getMonth()] + " " + viewDate.getFullYear();
 
-  var today = new Date();
   var first = new Date(viewDate.getFullYear(), viewDate.getMonth(), 1);
   var startOffset = (first.getDay() + 6) % 7; /* Monday first */
   var daysInMonth = new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 0).getDate();
+  var tk = todayKey();
 
   var cells = "";
   for (var i = 0; i < startOffset; i++) {
@@ -150,15 +191,25 @@ function renderCalendar() {
   }
 
   for (var d = 1; d <= daysInMonth; d++) {
-    var isToday = d === today.getDate() && viewDate.getMonth() === today.getMonth() && viewDate.getFullYear() === today.getFullYear();
-    var isCurrent = viewDate.getMonth() === today.getMonth() && viewDate.getFullYear() === today.getFullYear();
-    var chips = isCurrent && isToday && allTasks.length
-      ? '<div class="mt-1.5 space-y-1">' + allTasks.map(taskChip).join("") + '</div>'
-      : "";
-    cells += '<div class="min-h-[96px] border border-white/5 p-2 hover:bg-surface-container-low/60 transition-colors '
-      + (isToday ? "bg-primary-container/30 shadow-[inset_0_0_0_1px_rgba(154,211,182,0.5)]" : "bg-surface-container-low/20")
+    var key = keyFor(viewDate.getFullYear(), viewDate.getMonth(), d);
+    var isToday = key === tk;
+    var isSelected = key === selectedDayKey;
+    var dayTasks = tasksOn(key);
+    var doneCount = dayTasks.filter(function(t){ return t.completed; }).length;
+    var chips = dayTasks.length
+      ? '<div class="mt-1.5 space-y-1">' + dayTasks.slice(0, 3).map(taskChip).join("")
+        + (dayTasks.length > 3 ? '<div class="text-[10px] text-on-surface-variant font-semibold px-1">+' + (dayTasks.length - 3) + ' more</div>' : "")
+        + '</div>'
+      : '<div class="text-[10px] text-on-surface-variant mt-2 px-1 italic">Click to plan</div>';
+    cells += '<div onclick="openDayModal(\'' + key + '\')" class="min-h-[96px] border p-2 cursor-pointer transition-all hover:bg-surface-container-low/60 hover:border-primary/30 '
+      + (isSelected ? "bg-primary-container/40 shadow-[inset_0_0_0_2px_rgba(154,211,182,0.7)]"
+        : isToday ? "bg-primary-container/20 shadow-[inset_0_0_0_1px_rgba(154,211,182,0.5)]"
+        : "bg-surface-container-low/20 border-white/5")
       + '">'
-      + '<span class="text-xs font-semibold ' + (isToday ? "text-primary" : "text-on-surface-variant") + '">' + d + '</span>'
+      + '<div class="flex items-center justify-between">'
+      + '<span class="text-xs font-semibold ' + (isToday ? "text-primary" : "text-on-surface") + '">' + d + '</span>'
+      + (dayTasks.length ? '<span class="text-[9px] font-bold text-primary bg-primary/15 rounded-full px-1.5 py-0.5">' + doneCount + '/' + dayTasks.length + '</span>' : '')
+      + '</div>'
       + chips
       + '</div>';
   }
@@ -175,21 +226,130 @@ async function loadTasks() {
   renderCalendar();
 }
 
+/* ===== DAY TIMETABLE MODAL ===== */
+function openDayModal(key) {
+  selectedDayKey = key;
+  renderCalendar();
+  var dObj = new Date(key + "T00:00:00");
+  var tk = todayKey();
+  document.getElementById("dayModalTitle").textContent =
+    DAYS[dObj.getDay()] + ", " + dObj.getDate() + " " + MONTHS[dObj.getMonth()] + (key === tk ? " • Today" : "");
+  renderDayTasks();
+  var m = document.getElementById("dayModal");
+  m.classList.remove("hidden"); m.classList.add("flex");
+}
+
+function refreshDayModal() {
+  if (selectedDayKey && !document.getElementById("dayModal").classList.contains("hidden")) {
+    renderDayTasks();
+  }
+  renderCalendar();
+}
+
+function closeDayModal() {
+  var m = document.getElementById("dayModal");
+  m.classList.add("hidden"); m.classList.remove("flex");
+}
+
+function renderDayTasks() {
+  var list = document.getElementById("dayTaskList");
+  var dObj = new Date(selectedDayKey + "T00:00:00");
+  var sub = document.getElementById("dayModalSub");
+  sub.textContent = DAYS[dObj.getDay()] + " ka timetable — ✎ edit • 🗑 delete • tick to complete";
+  var dayTasks = tasksOn(selectedDayKey);
+  if (!dayTasks.length) {
+    list.innerHTML = '<div class="glass-panel rounded-2xl p-6 text-center text-on-surface-variant"><span class="material-symbols-outlined text-[36px] text-primary">event_note</span><p class="mt-2 text-sm">Empty day. Add your first block!</p></div>';
+    return;
+  }
+  list.innerHTML = dayTasks.map(function(t){
+    var done = t.completed;
+    var timeTxt = t.no_time ? "Daily target" : (t.start_time || "") + " – " + (t.end_time || "");
+    return '<div class="flex items-center gap-3 bg-surface-container-low rounded-xl px-3 py-2.5 ' + (done ? "opacity-50" : "") + '">'
+      + '<button onclick="toggleDayTask(\'' + t.id + '\')" class="w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ' + (done ? "bg-primary border-primary" : "border-white/20") + '">'
+      + (done ? '<span class="material-symbols-outlined text-on-primary text-[14px]" style="font-variation-settings:\'FILL\' 1;">check</span>' : "")
+      + '</button>'
+      + '<div class="flex-1 min-w-0"><div class="text-sm font-medium truncate ' + (done ? "line-through" : "") + '">' + prioDot(t.priority) + ' ' + t.name + '</div>'
+      + '<div class="text-xs text-on-surface-variant">' + timeTxt + '</div></div>'
+      + '<button onclick="editDayTask(\'' + t.id + '\')" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-primary hover:bg-primary-container/30 transition-all shrink-0">'
+      + '<span class="material-symbols-outlined text-[16px]">edit</span></button>'
+      + '<button onclick="deleteDayTask(\'' + t.id + '\')" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-error hover:bg-error-container/30 transition-all shrink-0">'
+      + '<span class="material-symbols-outlined text-[16px]">delete</span></button>'
+      + '</div>';
+  }).join("");
+}
+
+async function toggleDayTask(id) {
+  await fetch("/api/tasks/" + id + "/complete", { method: "POST" });
+  await loadTasks();
+  refreshDayModal();
+}
+
+async function deleteDayTask(id) {
+  if (!confirm("Delete this task?")) return;
+  await fetch("/api/tasks/" + id, { method: "DELETE" });
+  await loadTasks();
+  refreshDayModal();
+}
+
+function fillEventForm(t) {
+  document.getElementById("eName").value = t.name || "";
+  document.getElementById("eDate").value = t.date || selectedDayKey || todayKey();
+  document.getElementById("eStart").value = t.start_time || "14:00";
+  document.getElementById("eEnd").value = t.end_time || "15:30";
+  document.getElementById("eEnergy").value = t.energy || "Med";
+  document.getElementById("ePriority").value = t.priority || "P2";
+}
+
+function setEventMode(isEdit) {
+  document.getElementById("eEditId").value = isEdit ? editingEventId : "";
+  document.getElementById("eventModalTitle").textContent = isEdit ? "Edit Task" : "Add Task";
+  document.getElementById("eventSubmitBtn").innerHTML = isEdit
+    ? '<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: \'FILL\' 1;">save</span> Save Changes'
+    : '<span class="material-symbols-outlined text-[18px]" style="font-variation-settings: \'FILL\' 1;">add_circle</span> Add Task';
+}
+
+function editDayTask(id) {
+  var t = allTasks.find(function(x){ return x.id === id; });
+  if (!t) return;
+  editingEventId = id;
+  closeDayModal();
+  fillEventForm(t);
+  setEventMode(true);
+  var m = document.getElementById("eventModal");
+  m.classList.remove("hidden"); m.classList.add("flex");
+}
+
+function openAddForSelectedDay() {
+  editingEventId = null;
+  closeDayModal();
+  fillEventForm({ date: selectedDayKey });
+  setEventMode(false);
+  var m = document.getElementById("eventModal");
+  m.classList.remove("hidden"); m.classList.add("flex");
+}
+
 document.addEventListener("DOMContentLoaded", function () {
   loadTasks();
   document.getElementById("prevMonth").addEventListener("click", function () {
     viewDate.setMonth(viewDate.getMonth() - 1);
+    selectedDayKey = null;
     renderCalendar();
   });
   document.getElementById("nextMonth").addEventListener("click", function () {
     viewDate.setMonth(viewDate.getMonth() + 1);
+    selectedDayKey = null;
     renderCalendar();
   });
   document.getElementById("todayBtn").addEventListener("click", function () {
     viewDate = new Date(); viewDate.setDate(1);
+    selectedDayKey = todayKey();
     renderCalendar();
   });
+  /* Header button: add for selected day or today */
   document.getElementById("addEventBtn").addEventListener("click", function () {
+    editingEventId = null;
+    fillEventForm({ date: selectedDayKey || todayKey() });
+    setEventMode(false);
     var m = document.getElementById("eventModal");
     m.classList.remove("hidden"); m.classList.add("flex");
   });
@@ -197,22 +357,35 @@ document.addEventListener("DOMContentLoaded", function () {
     e.preventDefault();
     var name = document.getElementById("eName").value.trim();
     if (!name) return;
-    await fetch("/api/tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        name: name,
-        start_time: document.getElementById("eStart").value,
-        end_time: document.getElementById("eEnd").value,
-        energy: document.getElementById("eEnergy").value,
-        priority: document.getElementById("ePriority").value
-      })
-    });
+    var payload = {
+      name: name,
+      date: document.getElementById("eDate").value,
+      start_time: document.getElementById("eStart").value,
+      end_time: document.getElementById("eEnd").value,
+      energy: document.getElementById("eEnergy").value,
+      priority: document.getElementById("ePriority").value
+    };
+    if (editingEventId) {
+      await fetch("/api/tasks/" + editingEventId, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+    } else {
+      await fetch("/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+      });
+    }
+    editingEventId = null;
     closeEventModal();
-    document.getElementById("eName").value = "";
-    loadTasks();
+    await loadTasks();
+    if (selectedDayKey) { openDayModal(selectedDayKey); }
   });
-  document.addEventListener("keydown", function (e) { if (e.key === "Escape") closeEventModal(); });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape") { closeEventModal(); closeDayModal(); }
+  });
 });
 </script>
 </body>

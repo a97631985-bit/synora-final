@@ -218,7 +218,7 @@ async function loadTimeline() {
           return '<div class="flex items-center gap-3 bg-surface-container-low rounded-xl px-3 py-2.5 ' + (done ? 'opacity-50' : '') + '">'
             + '<button onclick="toggleTask(\'' + t.id + '\')" class="w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0 ' + (done ? 'bg-primary border-primary' : 'border-white/20') + '">' + (done ? '<span class="material-symbols-outlined text-on-primary text-[14px]" style="font-variation-settings:\'FILL\' 1;">check</span>' : '') + '</button>'
             + '<span class="flex-1 text-sm ' + (done ? 'line-through' : 'font-medium') + '">' + prioDot + ' ' + t.name + '</span>'
-            + '<span class="text-xs text-on-surface-variant">' + t.start_time + '</span>'
+            + '<span class="text-xs text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">flag</span>~' + (t.duration || 60) + 'm</span>'
             + '</div>';
         }).join("") + '</div></div>';
   }).join("");
@@ -342,16 +342,24 @@ document.addEventListener("DOMContentLoaded", function(){
     btn.disabled = true;
     document.getElementById("generateLabel").textContent = "Synora AI is planning...";
     status.classList.add("hidden");
+    /* live progress ticker so it never looks stuck */
+    var t0 = Date.now();
+    var ticker = setInterval(function(){
+      var secs = Math.round((Date.now() - t0) / 1000);
+      document.getElementById("generateLabel").textContent = "Synora AI is planning... " + secs + "s";
+    }, 1000);
     try {
       var res = await fetch("/api/syllabus/generate", {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({exam: exam, syllabus: syllabus, exam_date: exam_date, daily_hours: dailyHours, subject: selectedSubject})});
       var data = await res.json();
       if (data.error) throw new Error(data.error);
-      status.textContent = "Plan created for " + selectedSubject + "! " + data.tasks.length + " tasks for " + data.plan.days_generated + " days.";
+      clearInterval(ticker);
+      status.textContent = "Plan created for " + selectedSubject + "! " + data.tasks.length + " tasks covering " + data.plan.days_generated + " days till exam.";
       status.className="text-sm text-center mt-3 text-primary";
       status.classList.remove("hidden");
       activePlanId = data.plan.id;
       loadPlans();
     } catch(e){
+      clearInterval(ticker);
       status.textContent = e.message;
       status.className="text-sm text-center mt-3 text-error";
       status.classList.remove("hidden");
