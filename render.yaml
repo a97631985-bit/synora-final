@@ -17,5 +17,7 @@ services:
         fromDatabase:
           name: synora-db
           property: connectionString
+      - key: ADMIN_KEY
+        value: synora-admin-2026
       - key: PYTHON_VERSION
         value: "3.11"

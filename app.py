@@ -72,6 +72,16 @@ class User(db.Model):
     email = db.Column(db.String(200), unique=True, nullable=False, index=True)
     username = db.Column(db.String(120), nullable=False)
     password = db.Column(db.String(300), default="")
+    phone = db.Column(db.String(20), nullable=True)
+    phone_verified = db.Column(db.Boolean, default=False)
+    email_verified = db.Column(db.Boolean, default=False)
+    exam_goal = db.Column(db.String(100), nullable=True)  # JEE, NEET etc
+    study_level = db.Column(db.String(50), nullable=True)  # 11th, 12th, Dropper etc
+    daily_hours = db.Column(db.Integer, nullable=True)
+    school = db.Column(db.String(200), nullable=True)
+    age = db.Column(db.Integer, nullable=True)
+    onboarded = db.Column(db.Boolean, default=False)
+    auth_provider = db.Column(db.String(20), default="email")  # email/google/phone
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     current_energy = db.Column(db.String(20), default="Active")
     last_taunt = db.Column(db.Text, nullable=True)
@@ -665,6 +675,50 @@ def features():
 @app.route("/methodology")
 def methodology():
     return render_template("methodology.html", active_tab="methodology")
+
+
+@app.route("/admin")
+def admin_panel():
+    # Simple key check — set ADMIN_KEY env var on Render, default for local
+    key = request.args.get("key") or request.headers.get("X-Admin-Key")
+    expected = os.environ.get("ADMIN_KEY", "synora-admin-2026")
+    if key != expected:
+        return f'''<div style="display:flex;min-height:100vh;align-items:center;justify-content:center;background:#111415;color:#e1e3e4;font-family:system-ui"><form style="background:#191c1d;padding:32px;border-radius:16px;border:1px solid rgba(255,255,255,0.08);text-align:center"><h2 style="color:#9ad3b6">Admin Access</h2><p style="color:#8a938c;font-size:13px">Enter admin key to view user data</p><input name="key" placeholder="ADMIN_KEY" style="width:100%;margin:12px 0;padding:10px 14px;border-radius:10px;background:#0c0f10;border:1px solid rgba(138,147,140,0.3);color:#e1e3e4"/><br><button type="submit" style="width:100%;padding:10px;background:#9ad3b6;color:#003825;border:none;border-radius:10px;font-weight:700">Unlock</button><p style="font-size:11px;color:#8a938c;margin-top:10px">Default local key: <code>synora-admin-2026</code></p></form></div>''', 401
+    users = User.query.order_by(User.created_at.desc()).all()
+    # Build simple HTML table (no template needed for quick view)
+    rows = ""
+    for u in users:
+        tasks = u.tasks_data or []
+        focus = u.focus_data or []
+        total_tasks = len(tasks)
+        done = len([t for t in tasks if t.get("completed")])
+        rows += f"<tr style='border-bottom:1px solid rgba(255,255,255,0.06)'><td style='padding:10px'>{u.id}</td><td style='padding:10px;font-weight:600'>{u.username}</td><td style='padding:10px'>{u.email}</td><td style='padding:10px'>{u.phone or '-'}</td><td style='padding:10px'>{u.exam_goal or '-'}</td><td style='padding:10px'>{u.study_level or '-'}</td><td style='padding:10px'>{total_tasks} ({done} done)</td><td style='padding:10px'>{len(focus)}</td><td style='padding:10px'>{u.created_at.strftime('%Y-%m-%d %H:%M') if u.created_at else '-'}</td><td style='padding:10px'><span style='padding:3px 8px;border-radius:99px;font-size:11px;background:{'#9ad3b61a' if u.email_verified else '#ff8a651a'};border:1px solid rgba(255,255,255,0.08)'>{ '✓' if u.email_verified else '✗'} Email</span> <span style='padding:3px 8px;border-radius:99px;font-size:11px;background:{'#9ad3b61a' if u.phone_verified else '#ff8a651a'};border:1px solid rgba(255,255,255,0.08)'>{ '✓' if u.phone_verified else '✗'} Phone</span></td></tr>"
+    return f"""
+    <html class="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synora Admin</title></head>
+    <body style="background:#111415;color:#e1e3e4;font-family:system-ui;padding:24px">
+    <h1 style="color:#9ad3b6">Synora — User Database <span style="font-size:12px;color:#8a938c">({len(users)} users)</span></h1>
+    <p style="color:#8a938c;font-size:13px">Local SQLite: <code>instance/synora.db</code> • Render Postgres: <code>DATABASE_URL</code> • Export: <a href="/admin/export?key={expected}" style="color:#4cd7f6">Download JSON</a></p>
+    <div style="overflow:auto;background:#191c1d;border-radius:16px;border:1px solid rgba(255,255,255,0.06);margin-top:16px">
+    <table style="width:100%;border-collapse:collapse;font-size:13px"><thead style="background:rgba(154,211,182,0.08);text-align:left"><tr><th style="padding:10px">ID</th><th style="padding:10px">Name</th><th style="padding:10px">Email</th><th style="padding:10px">Phone</th><th style="padding:10px">Exam</th><th style="padding:10px">Level</th><th style="padding:10px">Tasks</th><th style="padding:10px">Focus</th><th style="padding:10px">Created</th><th style="padding:10px">Verified</th></tr></thead><tbody>{rows or '<tr><td colspan=10 style="padding:24px;text-align:center;color:#8a938c">No users yet — create via /signup</td></tr>'}</tbody></table></div>
+    <p style="margin-top:16px;font-size:12px;color:#8a938c">Tip: Local me DB Browser for SQLite se <code>instance/synora.db</code> khol ke bhi dekh sakte ho. Render pe Dashboard → Postgres → Connect → psql.</p>
+    </body></html>
+    """
+
+@app.route("/admin/export")
+def admin_export():
+    key = request.args.get("key")
+    if key != os.environ.get("ADMIN_KEY", "synora-admin-2026"):
+        return jsonify({"error": "Unauthorized"}), 401
+    users = User.query.all()
+    data = []
+    for u in users:
+        data.append({
+            "id": u.id, "email": u.email, "username": u.username, "phone": u.phone,
+            "exam_goal": u.exam_goal, "study_level": u.study_level, "daily_hours": u.daily_hours,
+            "tasks": u.tasks_data, "focus_sessions": u.focus_data, "syllabus_plans": u.syllabus_data,
+            "learning_data": u.learning_data, "created_at": u.created_at.isoformat() if u.created_at else None
+        })
+    return jsonify({"users": data, "count": len(data)})
 
 
 # ---------------------------------------------------------------------------
@@ -2440,6 +2494,148 @@ def api_learning_status():
         "last_analyzed": ld.get("last_analyzed"),
         "ready_for_routine": len(set(r["date"] for r in reports)) >= 3
     })
+
+
+# ---------------------------------------------------------------------------
+# Auth Routes — signup/login with Google, OTP, Skip
+# ---------------------------------------------------------------------------
+otp_store = {}  # {target: {otp, kind, expires}}
+
+@app.route("/signup", methods=["GET"])
+def signup_page():
+    return render_template("signup_new.html")
+
+@app.route("/signup", methods=["POST"])
+def signup_post():
+    username = (request.form.get("username") or "").strip()
+    email = (request.form.get("email") or "").strip().lower()
+    phone = (request.form.get("phone") or "").strip()
+    password = request.form.get("password") or ""
+    confirm = request.form.get("confirm") or ""
+    exam_goal = request.form.get("exam_goal") or None
+    study_level = request.form.get("study_level") or None
+    daily_hours = request.form.get("daily_hours")
+    school = request.form.get("school") or None
+    age = request.form.get("age")
+    if not username or not email or not password:
+        return render_template("signup_new.html", error="Name, email and password required")
+    if password != confirm:
+        return render_template("signup_new.html", error="Passwords do not match")
+    if len(password) < 6:
+        return render_template("signup_new.html", error="Password must be at least 6 chars")
+    if User.query.filter_by(email=email).first():
+        return render_template("signup_new.html", error="Email already registered — try login")
+    try:
+        daily_hours = int(daily_hours) if daily_hours else None
+    except:
+        daily_hours = None
+    try:
+        age = int(age) if age else None
+    except:
+        age = None
+    # Check verified flags from session (set via OTP verify)
+    email_verified = session.get(f"otp_verified_email_{email}") is True
+    phone_verified = session.get(f"otp_verified_phone_{phone}") is True if phone else False
+    user = User(
+        username=username, email=email, password=password, phone=phone,
+        phone_verified=phone_verified, email_verified=email_verified,
+        exam_goal=exam_goal, study_level=study_level, daily_hours=daily_hours,
+        school=school, age=age, onboarded=bool(exam_goal or study_level),
+        auth_provider="email"
+    )
+    db.session.add(user)
+    db.session.commit()
+    session["email"] = email
+    session["username"] = username
+    return redirect(url_for("dashboard"))
+
+@app.route("/login", methods=["GET"])
+def login_page():
+    return render_template("login_new.html")
+
+@app.route("/login", methods=["POST"])
+def login_post():
+    email = (request.form.get("email") or "").strip().lower()
+    password = request.form.get("password") or ""
+    # Allow phone login via email field
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        # try phone
+        user = User.query.filter_by(phone=email).first()
+    if not user or user.password != password:
+        return render_template("login_new.html", error="Invalid email/phone or password")
+    session["email"] = user.email
+    session["username"] = user.username
+    return redirect(url_for("dashboard"))
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login_page"))
+
+@app.route("/auth/send-otp", methods=["POST"])
+def auth_send_otp():
+    data = request.get_json(silent=True) or {}
+    kind = data.get("kind")  # email/phone
+    target = (data.get("target") or "").strip()
+    if not target:
+        return jsonify({"error": "Target required"}), 400
+    otp = f"{random.randint(100000, 999999)}"
+    otp_store[target] = {"otp": otp, "kind": kind, "expires": datetime.now() + timedelta(minutes=5)}
+    # In production, send via email/SMS. For demo, return OTP.
+    print(f"[OTP] {kind} {target} -> {otp}")
+    return jsonify({"ok": True, "otp": otp, "message": f"OTP sent to {target} (demo: {otp})"})
+
+@app.route("/auth/verify-otp", methods=["POST"])
+def auth_verify_otp():
+    data = request.get_json(silent=True) or {}
+    kind = data.get("kind")
+    target = (data.get("target") or "").strip()
+    otp = (data.get("otp") or "").strip()
+    login = data.get("login") is True
+    rec = otp_store.get(target)
+    if not rec or rec["otp"] != otp:
+        return jsonify({"error": "Invalid OTP"}), 400
+    if datetime.now() > rec["expires"]:
+        return jsonify({"error": "OTP expired"}), 400
+    # Mark verified in session
+    session[f"otp_verified_{kind}_{target}"] = True
+    # If login flow, actually log the user in
+    if login:
+        user = User.query.filter_by(email=target).first() if kind=="email" else User.query.filter_by(phone=target).first()
+        if not user:
+            # Auto-create user on OTP login (passwordless)
+            username = target.split("@")[0] if "@" in target else target
+            user = User(username=username, email=target if kind=="email" else f"{target}@phone.local", phone=target if kind=="phone" else None,
+                        password="", phone_verified=(kind=="phone"), email_verified=(kind=="email"), auth_provider=kind)
+            db.session.add(user)
+            db.session.commit()
+        else:
+            if kind=="email":
+                user.email_verified = True
+            else:
+                user.phone_verified = True
+            db.session.commit()
+        session["email"] = user.email
+        session["username"] = user.username
+        return jsonify({"ok": True, "message": "Logged in"})
+    return jsonify({"ok": True, "message": "Verified"})
+
+@app.route("/auth/google", methods=["POST"])
+def auth_google():
+    data = request.get_json(silent=True) or {}
+    email = (data.get("email") or "").strip().lower()
+    if not email or "@" not in email:
+        return jsonify({"error": "Valid email required"}), 400
+    user = User.query.filter_by(email=email).first()
+    if not user:
+        username = email.split("@")[0]
+        user = User(username=username, email=email, password="", email_verified=True, auth_provider="google")
+        db.session.add(user)
+        db.session.commit()
+    session["email"] = user.email
+    session["username"] = user.username
+    return jsonify({"ok": True})
 
 
 if __name__ == "__main__":
