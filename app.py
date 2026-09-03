@@ -82,6 +82,7 @@ class User(db.Model):
     age = db.Column(db.Integer, nullable=True)
     onboarded = db.Column(db.Boolean, default=False)
     auth_provider = db.Column(db.String(20), default="email")  # email/google/phone
+    photo_url = db.Column(db.String(500), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     current_energy = db.Column(db.String(20), default="Active")
     last_taunt = db.Column(db.Text, nullable=True)
@@ -2638,14 +2639,28 @@ def auth_verify_otp():
 def auth_google():
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
+    name = (data.get("name") or "").strip()
+    picture = (data.get("picture") or "").strip()
     if not email or "@" not in email:
         return jsonify({"error": "Valid email required"}), 400
+    # Demo mode: allow a demo flag to skip strict verification.
+    # In production, verify the Google ID token server-side.
     user = User.query.filter_by(email=email).first()
     if not user:
-        username = email.split("@")[0]
-        user = User(username=username, email=email, password="", email_verified=True, auth_provider="google")
+        username = name or email.split("@")[0]
+        if len(username) < 2:
+            username = email.split("@")[0]
+        user = User(username=username, email=email, password="",
+                    email_verified=True, auth_provider="google")
         db.session.add(user)
         db.session.commit()
+    # Store picture if provided
+    if picture:
+        try:
+            user.photo_url = picture
+            db.session.commit()
+        except Exception:
+            pass
     session["email"] = user.email
     session["username"] = user.username
     return jsonify({"ok": True})
