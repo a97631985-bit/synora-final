@@ -1,3 +1,9 @@
+databases:
+  - name: synora-db
+    databaseName: synora
+    user: synora
+    plan: free
+
 services:
   - type: web
     name: synora-ai
@@ -7,5 +13,9 @@ services:
     envVars:
       - key: GEMINI_API_KEY
         sync: false
+      - key: DATABASE_URL
+        fromDatabase:
+          name: synora-db
+          property: connectionString
       - key: PYTHON_VERSION
         value: "3.11"
