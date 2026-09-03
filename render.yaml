@@ -17,6 +17,15 @@ services:
         fromDatabase:
           name: synora-db
           property: connectionString
+      # REQUIRED in production: generate a long random secret, e.g.
+      #   python -c "import secrets; print(secrets.token_hex(32))"
+      - key: SYNORA_SECRET
+        sync: false
+      # Optional: Gmail app-password for real email OTP
+      - key: MAIL_EMAIL
+        sync: false
+      - key: MAIL_PASSWORD
+        sync: false
       - key: ADMIN_KEY
         value: synora-admin-2026
       - key: PYTHON_VERSION

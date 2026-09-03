@@ -20,9 +20,21 @@ except ImportError:
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.ext.mutable import MutableList, MutableDict
+from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
-app.secret_key = os.environ.get("SYNORA_SECRET", "synora-hackathon-demo-secret-key-2026")
+# SECURITY: always set SYNORA_SECRET to a long random value in production!
+# The fallback below is ONLY for local dev — never rely on it in a live deploy.
+app.secret_key = os.environ.get("SYNORA_SECRET") or os.urandom(32).hex()
+# Session/cookie hardening
+app.config["SESSION_COOKIE_HTTPONLY"] = True
+app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
+# Secure cookies only over HTTPS. Enabled by default on Render (has DATABASE_URL / prod),
+# disabled for local HTTP testing unless explicitly forced on.
+_is_prod = bool(os.environ.get("DATABASE_URL", "")) or os.environ.get("SYNORA_SECURE_COOKIES") == "1"
+app.config["SESSION_COOKIE_SECURE"] = _is_prod
+app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
+app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
 # --- Database Config: Postgres on Render, SQLite locally ---
 db_url = os.environ.get("DATABASE_URL", "")
@@ -235,12 +247,35 @@ with app.app_context():
     db.create_all()
 
 
+def _hash_password(plain):
+    """Hash a password using werkzeug (PBKDF2). Empty/short placeholders stay hashed too."""
+    if not plain:
+        return ""
+    return generate_password_hash(plain)
+
+
+def _check_password(stored, plain):
+    """Verify a plaintext password against a stored hash. Handles legacy plaintext too."""
+    if not stored:
+        return False
+    if not plain:
+        return False
+    # Already hashed (werkzeug hashes start with pbkdf2: or scrypt:)
+    if stored.startswith(("pbkdf2:", "scrypt:", "sha256$")):
+        try:
+            return check_password_hash(stored, plain)
+        except Exception:
+            return False
+    # Legacy plaintext stored before hashing was introduced
+    return stored == plain
+
+
 def create_user(username, email, password):
     existing = User.query.filter_by(email=email).first()
     if existing:
         return existing
     user = User(
-        username=username, email=email, password=password,
+        username=username, email=email, password=_hash_password(password),
         current_energy="Active",
         learning_data={
             "energy_reports": [], "completion_patterns": [], "focus_sessions_detailed": [],
@@ -2597,7 +2632,7 @@ def signup_post():
     email_verified = session.get(f"otp_verified_email_{email}") is True
     phone_verified = session.get(f"otp_verified_phone_{phone}") is True if phone else False
     user = User(
-        username=username, email=email, password=password, phone=phone,
+        username=username, email=email, password=_hash_password(password), phone=phone,
         phone_verified=phone_verified, email_verified=email_verified,
         exam_goal=exam_goal, study_level=study_level, daily_hours=daily_hours,
         school=school, age=age, onboarded=bool(exam_goal or study_level),
@@ -2622,7 +2657,7 @@ def login_post():
     if not user:
         # try phone
         user = User.query.filter_by(phone=email).first()
-    if not user or user.password != password:
+    if not user or not _check_password(user.password, password):
         return render_template("login_new.html", error="Invalid email/phone or password")
     session["email"] = user.email
     session["username"] = user.username
