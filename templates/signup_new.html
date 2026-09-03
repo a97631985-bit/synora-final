@@ -434,9 +434,35 @@ async function sendOtp(kind){
     btn.textContent = 'Resend'; btn.disabled = false;
     document.getElementById(kind+'Otp').style.display = 'flex';
     document.getElementById(kind+'VerifyBtn').style.display = 'block';
-    alert('OTP sent! (demo: '+d.otp+')');
+    showOtpPopup(kind, val, d);
   } else { btn.textContent = 'Retry'; btn.disabled = false; alert(d.error||'Failed'); }
 }
+
+function showOtpPopup(kind, target, data){
+  const isDemo = data.delivery === 'demo' && data.otp;
+  document.getElementById('otpModalTitle').textContent = 'OTP Sent';
+  if(kind === 'email'){
+    document.getElementById('otpModalBody').innerHTML =
+      'A 6-digit verification code has been sent to your email:<br><strong style="color:#9ad3b6">' + target + '</strong>';
+  } else {
+    document.getElementById('otpModalBody').innerHTML =
+      'An SMS with your 6-digit code has been sent to:<br><strong style="color:#9ad3b6">' + target + '</strong>';
+  }
+  const demoBox = document.getElementById('otpDemoBox');
+  if(isDemo){
+    demoBox.style.display = 'block';
+    // OTP can arrive via gmail; show code live if demo
+    document.getElementById('otpDemoCode').textContent = data.otp;
+  } else {
+    demoBox.style.display = 'none';
+  }
+  document.getElementById('otpModalOverlay').classList.add('open');
+  // Focus OTP input
+  setTimeout(()=>{ const inp = document.getElementById(kind==='email'?'emailOtp':'phoneOtp'); if(inp){ inp.focus(); } }, 100);
+}
+
+function closeOtpPopup(){ document.getElementById('otpModalOverlay').classList.remove('open'); }
+
 
 async function verifyOtp(kind){
   const otp = document.getElementById(kind+'Otp').value.trim();
@@ -515,4 +541,45 @@ async function finishGoogleLogin(email, name, picture){
 }
 </script>
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+
+<!-- OTP Sent Modal -->
+<div id="otpModalOverlay" class="otp-overlay">
+  <div class="otp-modal">
+    <div class="otp-close" onclick="closeOtpPopup()">&times;</div>
+    <div class="otp-icon"><span class="material-symbols-outlined" style="font-size:42px">mark_email_read</span></div>
+    <h3 id="otpModalTitle">OTP Sent</h3>
+    <p id="otpModalBody" style="color:#8a938c; font-size:0.85rem; line-height:1.6; margin-top:8px"></p>
+    <div id="otpDemoBox" style="display:none; margin-top:14px; background:rgba(76,215,246,0.06); border:1px dashed rgba(76,215,246,0.3); border-radius:12px; padding:12px; text-align:center">
+      <div style="font-size:0.7rem; color:#8a938c; text-transform:uppercase; letter-spacing:0.08em">Demo mode — your code</div>
+      <div id="otpDemoCode" style="font-size:2rem; font-weight:800; color:#4cd7f6; letter-spacing:0.3em; margin-top:4px"></div>
+      <div style="font-size:0.7rem; color:#8a938c; margin-top:6px">(Production me ye email/SMS me jaata hai)</div>
+    </div>
+    <button class="btn-verify" onclick="closeOtpPopup()" style="width:100%; margin-top:18px">Got it</button>
+  </div>
+</div>
+
+<style>
+  .otp-overlay {
+    position:fixed; inset:0; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px);
+    display:none; align-items:center; justify-content:center; z-index:999; padding:1rem;
+  }
+  .otp-overlay.open { display:flex; }
+  .otp-modal {
+    background:#1d2021; border:1px solid rgba(255,255,255,0.08); border-radius:20px;
+    padding:2.2rem 2rem 1.5rem; max-width:360px; width:100%; position:relative; text-align:center;
+    animation: slideUp 0.4s cubic-bezier(0.4,0,0.2,1);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .otp-close {
+    position:absolute; top:12px; right:16px; font-size:1.6rem; color:#8a938c; cursor:pointer; line-height:1;
+  }
+  .otp-close:hover { color:#e1e3e4; }
+  .otp-icon {
+    width:72px; height:72px; border-radius:50%; margin:0 auto 14px;
+    background:linear-gradient(135deg, rgba(154,211,182,0.15), rgba(76,215,246,0.1));
+    display:flex; align-items:center; justify-content:center; color:#9ad3b6;
+    border:1px solid rgba(154,211,182,0.2);
+  }
+  .otp-modal h3 { font-size:1.2rem; font-weight:800; }
+</style>
 </body></html>

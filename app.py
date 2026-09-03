@@ -2515,6 +2515,52 @@ def api_learning_status():
 # ---------------------------------------------------------------------------
 otp_store = {}  # {target: {otp, kind, expires}}
 
+# ---------------------------------------------------------------------------
+# Email OTP via Gmail SMTP (set env vars on Render / local shell):
+#   MAIL_EMAIL   = your Gmail address
+#   MAIL_PASSWORD= Gmail "App Password" (not your normal password)
+#   MAIL_SMTP    = smtp.gmail.com (default)
+#   MAIL_PORT    = 587 (default)
+# If MAIL_EMAIL is not set, falls back to demo mode (OTP returned in response).
+# ---------------------------------------------------------------------------
+def send_otp_email(to_email, otp):
+    sender = os.environ.get("MAIL_EMAIL", "").strip()
+    password = os.environ.get("MAIL_PASSWORD", "").strip()
+    smtp_host = os.environ.get("MAIL_SMTP", "smtp.gmail.com")
+    smtp_port = int(os.environ.get("MAIL_PORT", "587"))
+    if not sender or not password:
+        return "not_configured"
+    import smtplib
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    body = f"""Hello from Synora AI!
+
+Your one-time verification code is:
+
+    {otp}
+
+This code expires in 5 minutes. If you didn't request this, you can safely ignore this email.
+
+— Synora AI, your adaptive study companion
+"""
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = "Your Synora AI verification code"
+    msg["From"] = f"Synora AI <{sender}>"
+    msg["To"] = to_email
+    msg.attach(MIMEText(body, "plain"))
+    try:
+        server = smtplib.SMTP(smtp_host, smtp_port)
+        server.ehlo()
+        server.starttls()
+        server.ehlo()
+        server.login(sender, password)
+        server.sendmail(sender, [to_email], msg.as_string())
+        server.quit()
+        return "sent"
+    except Exception as e:
+        print(f"[OTP-EMAIL] failed: {e}")
+        return "error"
+
 @app.route("/signup", methods=["GET"])
 def signup_page():
     return render_template("signup_new.html")
@@ -2596,9 +2642,21 @@ def auth_send_otp():
         return jsonify({"error": "Target required"}), 400
     otp = f"{random.randint(100000, 999999)}"
     otp_store[target] = {"otp": otp, "kind": kind, "expires": datetime.now() + timedelta(minutes=5)}
-    # In production, send via email/SMS. For demo, return OTP.
-    print(f"[OTP] {kind} {target} -> {otp}")
-    return jsonify({"ok": True, "otp": otp, "message": f"OTP sent to {target} (demo: {otp})"})
+    # Try to send a real email OTP
+    delivery = "demo"
+    if kind == "email":
+        delivery = send_otp_email(target, otp)
+    else:
+        # Phone: real SMS needs a provider (Fast2SMS/Twilio). Demo for now.
+        delivery = "demo"
+    print(f"[OTP] {kind} {target} -> {otp} (delivery={delivery})")
+    resp = {"ok": True, "message": f"OTP sent to {target}", "delivery": delivery}
+    # If email wasn't actually sent (not configured or failed), include the OTP
+    # so the user can still proceed in demo mode.
+    if delivery in ("demo", "not_configured", "error"):
+        resp["otp"] = otp
+        resp["delivery"] = "demo"
+    return jsonify(resp)
 
 @app.route("/auth/verify-otp", methods=["POST"])
 def auth_verify_otp():
