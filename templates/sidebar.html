@@ -288,10 +288,12 @@
             if (typeof animateHeal === "function") {
               animateHeal(data.cuts || [], data.schedule || [], oldTasks, data.dropped || [], function () {
                 if (typeof loadTasks === "function") loadTasks();
+                if (typeof loadTimetable === "function") loadTimetable();
                 if (typeof loadPredictedEnergy === "function") loadPredictedEnergy();
               });
             } else if (typeof loadTasks === "function") {
               loadTasks();
+              if (typeof loadTimetable === "function") loadTimetable();
             }
           } else {
             window.location.href = "/dashboard";

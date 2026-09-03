@@ -1435,6 +1435,180 @@ def api_reschedule():
         for t in kept
     )
 
+    # ========== GEMINI-POWERED RESCHEDULING (with heuristic fallback) ==========
+    gemini_schedule = None
+    gemini_cuts = []
+    gemini_dropped = []
+    if GEMINI_AVAILABLE and GEMINI_API_KEY and GEMINI_MODEL:
+        try:
+            # Build concise task list for prompt
+            task_lines = []
+            for t in kept:
+                dur = int((_hm_to_dt(t.get("end_time","23:59"), now) - _hm_to_dt(t.get("start_time","00:00"), now)).total_seconds() / 60)
+                task_lines.append(f'- id:{t["id"]} name:"{t["name"]}" priority:{t.get("priority","P3")} energy:{t.get("energy","Med")} duration:{dur}m orig:{t.get("start_time","?")}–{t.get("end_time","?")}')
+            tasks_text = "\n".join(task_lines)
+            energy_curve_hint = "Energy curve (circadian peaks 10AM & 4PM, dip 2PM): "
+            # quick energy per hour 06-22
+            tmp_curve = []
+            for h in range(start.hour, 22):
+                # simplified circadian
+                circadian = {6:0.6,7:0.7,8:0.9,9:1.1,10:1.2,11:1.15,12:0.9,13:0.75,14:0.65,15:0.8,16:1.1,17:1.05,18:0.9,19:0.8,20:0.7,21:0.6}.get(h,0.5)
+                emod = {"Low Energy":0.85,"Active":1.0,"Peak Focus":1.15}.get(user.get("current_energy","Active"),1.0)
+                tmp_curve.append(f"{h:02d}:00={round(circadian*emod,2)}")
+            energy_curve_hint += ", ".join(tmp_curve)
+
+            prompt = f"""You are Synora, an expert productivity scheduler. Rebuild the user's remaining day as the MOST productive schedule.
+
+Context:
+- Today: {now.strftime("%Y-%m-%d %H:%M")}
+- Reschedule window: {start.strftime("%H:%M")} to 22:00 (available {int(available)} min)
+- Wasted minutes today: {wasted}
+- Current energy: {user.get("current_energy","Active")}
+- {energy_curve_hint}
+- Rule: P1=Power (deep work, needs peak energy), P2=Focus (needs high energy), P3=Quick Win, P4=Break, P5=Unproductive (cut first if short on time). Minimum task length 15 min.
+
+Tasks to schedule:
+{tasks_text}
+
+Instructions:
+1. Place P1/P2 tasks in highest energy windows, earliest possible.
+2. Fill remaining gaps chronologically with P3/P4/P5.
+3. If demand > available: trim P5 up to 70%, P4 up to 50%, P3 up to 30% (min 15m) OR drop tasks that absolutely don't fit. Prefer trimming over dropping.
+4. No overlaps, all times within window, 5-min granularity, end_time > start_time.
+5. Be concise and realistic.
+
+Return ONLY valid JSON with no markdown, no explanation, in this exact shape:
+{{"schedule": [{{"id": "abc123", "start_time": "HH:MM", "end_time": "HH:MM"}}], "dropped": ["Task Name"], "cuts": [{{"name": "Task Name", "before": 60, "after": 30}}], "reasoning": "1-line why this is productive"}}
+If every task fits, dropped=[] and cuts=[].
+"""
+
+            resp = GEMINI_MODEL.generate_content(prompt)
+            raw = (getattr(resp, "text", "") or "").strip()
+            # strip code fences if present
+            if raw.startswith("```"):
+                raw = raw.strip("`")
+                # remove leading json marker
+                if raw.lstrip().startswith("json"):
+                    raw = raw.lstrip()[4:].strip()
+            parsed = json.loads(raw)
+            cand_schedule = parsed.get("schedule", [])
+            # Validate
+            seen_ids = set()
+            sched_map = {}
+            gemini_valid = True
+            intervals = []
+            orig_dur_by_id = {t["id"]: int((_hm_to_dt(t.get("end_time","23:59"), now) - _hm_to_dt(t.get("start_time","00:00"), now)).total_seconds()/60) for t in kept}
+            name_by_id = {t["id"]: t["name"] for t in kept}
+            for item in cand_schedule:
+                tid = item.get("id")
+                st = item.get("start_time")
+                en = item.get("end_time")
+                if tid not in name_by_id or tid in seen_ids:
+                    gemini_valid = False; break
+                try:
+                    s_dt = _hm_to_dt(st, now)
+                    e_dt = _hm_to_dt(en, now)
+                except Exception:
+                    gemini_valid = False; break
+                if not (start <= s_dt < e_dt <= window_end):
+                    gemini_valid = False; break
+                if (e_dt - s_dt).total_seconds() < 15*60:
+                    gemini_valid = False; break
+                # overlap check
+                for (os, oe) in intervals:
+                    if not (e_dt <= os or s_dt >= oe):
+                        gemini_valid = False; break
+                if not gemini_valid:
+                    break
+                intervals.append((s_dt, e_dt))
+                seen_ids.add(tid)
+                sched_map[tid] = (s_dt, e_dt)
+            if gemini_valid and len(seen_ids) > 0:
+                # Build normalized schedule list sorted chronologically
+                gemini_schedule = []
+                for tid, (s_dt, e_dt) in sorted(sched_map.items(), key=lambda kv: kv[1][0]):
+                    t = next(x for x in kept if x["id"] == tid)
+                    zs_vals = []
+                    cur = s_dt
+                    while cur < e_dt:
+                        h = cur.hour
+                        circ = {6:0.6,7:0.7,8:0.9,9:1.1,10:1.2,11:1.15,12:0.9,13:0.75,14:0.65,15:0.8,16:1.1,17:1.05,18:0.9,19:0.8,20:0.7,21:0.6}.get(h,0.5)
+                        emod = {"Low Energy":0.85,"Active":1.0,"Peak Focus":1.15}.get(user.get("current_energy","Active"),1.0)
+                        zs_vals.append(min(1.5, max(0.4, circ*emod)))
+                        cur += timedelta(minutes=15)
+                    gemini_schedule.append({
+                        "id": tid, "name": name_by_id[tid],
+                        "start_time": _dt_to_hm(s_dt), "end_time": _dt_to_hm(e_dt),
+                        "priority": t.get("priority","P3"),
+                        "energy_slot": round(sum(zs_vals)/len(zs_vals),2) if zs_vals else 0.5,
+                        "healed": True, "duration": int((e_dt - s_dt).total_seconds()/60)
+                    })
+                # Derive cuts & dropped
+                gemini_dropped = parsed.get("dropped", []) or []
+                # If Gemini didn't list dropped, infer from missing ids
+                dropped_ids = set(name_by_id.keys()) - seen_ids
+                if not gemini_dropped and dropped_ids:
+                    gemini_dropped = [name_by_id[did] for did in dropped_ids]
+                gemini_cuts = parsed.get("cuts", []) or []
+                # Enrich cuts with emoji/label if Gemini omitted
+                for c in gemini_cuts:
+                    if "emoji" not in c:
+                        c["emoji"] = {"P5":"⚪","P4":"🔵","P3":"🟢"}.get(next((x.get("priority","P3") for x in kept if x["name"]==c.get("name")), "P3"), "")
+                    if "label" not in c:
+                        c["label"] = {"P5":"Unproductive","P4":"Break","P3":"Quick Win"}.get(next((x.get("priority","P3") for x in kept if x["name"]==c.get("name")), "P3"), c.get("name",""))
+                    # ensure before/after
+                    if "before" not in c and c.get("name") in name_by_id.values():
+                        tid2 = next((k for k,v in name_by_id.items() if v==c["name"]), None)
+                        if tid2: c["before"] = orig_dur_by_id.get(tid2, 0)
+                # If Gemini succeeded, persist and return immediately
+                if gemini_schedule:
+                    dropped_id_set = set(name_by_id[k] for k in dropped_ids)  # name set for filtering
+                    # Persist onto user's real tasks (same Phase D as heuristic)
+                    dropped_name_set = set(gemini_dropped)
+                    # For cuts, update end_time implied by new schedule length already; no extra mutation needed
+                    new_tasks = []
+                    sched_by_id = {s["id"]: s for s in gemini_schedule}
+                    dropped_ids_set = dropped_ids
+                    for t in user["tasks"]:
+                        if t.get("completed"):
+                            new_tasks.append(t); continue
+                        tid = t.get("id")
+                        if tid in dropped_ids_set and _hm_to_dt(t.get("end_time","23:59"), now) > now:
+                            continue
+                        if tid in sched_by_id:
+                            s = sched_by_id[tid]
+                            t["start_time"] = s["start_time"]
+                            t["end_time"] = s["end_time"]
+                            t["healed"] = True
+                        new_tasks.append(t)
+                    user["tasks"] = new_tasks
+                    user["last_taunt"] = pick_taunt(wasted)
+                    # Filter cuts that were actually dropped
+                    gemini_cuts = [c for c in gemini_cuts if c.get("name") not in dropped_name_set]
+                    total_saved = sum((c.get("before",0)-c.get("after",0)) for c in gemini_cuts) if gemini_cuts else 0
+                    parts = []
+                    if gemini_cuts:
+                        cut_desc = ", ".join(f"{c.get('emoji','')} {c['name']} ({c.get('before')}m → {c.get('after')}m)" for c in gemini_cuts)
+                        parts.append(f"Gemini trimmed {len(gemini_cuts)} task(s): {cut_desc}.")
+                    if gemini_dropped:
+                        parts.append(f"Dropped: {', '.join(gemini_dropped)}.")
+                    parts.append(f"{len(gemini_schedule)} tasks placed in your peak energy windows. {parsed.get('reasoning','')}".strip())
+                    return jsonify({
+                        "message": "Gemini rebuilt your day! " + " ".join(parts),
+                        "healed": len(gemini_schedule),
+                        "dropped": gemini_dropped,
+                        "cuts": gemini_cuts,
+                        "taunt": pick_taunt(wasted),
+                        "wasted_minutes": wasted,
+                        "current_energy": user.get("current_energy","Active"),
+                        "schedule": sorted(gemini_schedule, key=lambda x: x["start_time"]),
+                        "energy_curve": [{"hour": h, "energy": round(min(1.5, max(0.4, {6:0.6,7:0.7,8:0.9,9:1.1,10:1.2,11:1.15,12:0.9,13:0.75,14:0.65,15:0.8,16:1.1,17:1.05,18:0.9,19:0.8,20:0.7,21:0.6}.get(h,0.5)*{"Low Energy":0.85,"Active":1.0,"Peak Focus":1.15}.get(user.get("current_energy","Active"),1.0))), 2)} for h in range(start.hour, 22)],
+                        "ai": True
+                    })
+        except Exception as _gem_e:
+            # Fall through to heuristic; log for debugging
+            print(f"[reschedule] Gemini failed, falling back to heuristic: {_gem_e}")
+
     # === SMART TIME-CUTTING: recover wasted minutes by compressing low-priority tasks ===
     # Order: Unproductive (P5, cut up to 70%) -> Breaks (P4, up to 50%) -> Quick Wins (P3, up to 30%)
     deficit = max(0.0, demand - available)
