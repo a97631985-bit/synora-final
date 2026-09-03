@@ -2071,6 +2071,139 @@ def api_learning_report_energy():
     return jsonify({"ok": True, "message": f"Recorded {energy} energy at {hour}:00"})
 
 
+@app.route("/api/timetable/suggest-tomorrow", methods=["GET"])
+@login_required
+def api_suggest_tomorrow():
+    """AI suggests tomorrow's timetable based on previous day (Gemini + fallback)."""
+    user = current_user()
+    today = datetime.now().date()
+    tomorrow = today + timedelta(days=1)
+    tomorrow_str = tomorrow.strftime("%Y-%m-%d")
+
+    # Already has tasks for tomorrow? Tell frontend but still suggest
+    existing_tomorrow = [t for t in user.get("tasks", []) if t.get("date") == tomorrow_str and not t.get("is_syllabus")]
+
+    # Source day: most recent day with tasks (today else yesterday etc, last 7 days)
+    source_tasks = []
+    source_date = None
+    for offset in range(0, 7):
+        d = today - timedelta(days=offset)
+        ds = d.strftime("%Y-%m-%d")
+        cand = [t for t in user.get("tasks", []) if t.get("date") == ds and not t.get("is_syllabus")]
+        if cand:
+            source_tasks = cand
+            source_date = ds
+            break
+
+    if not source_tasks:
+        return jsonify({"suggestion": [], "source_date": None, "message": "No previous tasks found — create today's tasks first and AI will learn.", "has_existing": bool(existing_tomorrow)})
+
+    # Try Gemini
+    suggestion = []
+    ai = False
+    reasoning = ""
+    if GEMINI_AVAILABLE and GEMINI_API_KEY and GEMINI_MODEL:
+        try:
+            lines = []
+            for t in source_tasks:
+                dur = int((_hm_to_dt(t.get("end_time","23:59"), datetime.now()) - _hm_to_dt(t.get("start_time","00:00"), datetime.now())).total_seconds()/60)
+                lines.append(f'- "{t["name"]}" priority:{t.get("priority","P3")} energy:{t.get("energy","Med")} duration:{dur}m orig:{t.get("start_time")}–{t.get("end_time")} completed:{t.get("completed", False)}')
+            prompt = f"""You are Synora. Based on the user's previous day ({source_date}), suggest a fresh but familiar timetable for tomorrow ({tomorrow_str}).
+
+Previous day tasks:
+{chr(10).join(lines)}
+
+Goal: Keep productive habits (P1/P2 at peak hours ~10AM & 4PM), adapt slightly for freshness — vary order if useful, keep durations realistic.
+If a task was completed quickly, keep it. If overrun, suggest realistic time.
+Minimum 15 min per task.
+
+Return ONLY JSON with no markdown:
+{{"suggestion": [{{"name": "Task name", "start_time": "HH:MM", "end_time": "HH:MM", "priority": "P1|P2|P3|P4|P5", "energy": "High|Med|Low"}}], "reasoning": "short why"}}
+Times must be within 06:30-22:00, no overlaps, 5-min granularity.
+"""
+            resp = GEMINI_MODEL.generate_content(prompt)
+            raw = (getattr(resp, "text", "") or "").strip()
+            if raw.startswith("```"):
+                raw = raw.strip("`")
+                if raw.lstrip().startswith("json"):
+                    raw = raw.lstrip()[4:].strip()
+            parsed = json.loads(raw)
+            cand = parsed.get("suggestion", [])
+            # Validate
+            seen = set()
+            intervals = []
+            valid = []
+            for it in cand:
+                nm = (it.get("name") or "").strip()
+                st = it.get("start_time"); en = it.get("end_time")
+                if not nm or not st or not en: continue
+                try:
+                    s_dt = _hm_to_dt(st, datetime.now())
+                    e_dt = _hm_to_dt(en, datetime.now())
+                except Exception:
+                    continue
+                if not (s_dt < e_dt and (e_dt - s_dt).total_seconds() >= 15*60): continue
+                # overlap
+                overlap=False
+                for (os, oe) in intervals:
+                    if not (e_dt <= os or s_dt >= oe):
+                        overlap=True; break
+                if overlap: continue
+                intervals.append((s_dt, e_dt))
+                valid.append({"name": nm, "start_time": st, "end_time": en, "priority": it.get("priority","P2"), "energy": it.get("energy","Med")})
+            if valid:
+                suggestion = valid
+                ai = True
+                reasoning = parsed.get("reasoning","")
+        except Exception as _e:
+            print(f"[suggest] Gemini failed: {_e}")
+
+    if not suggestion:
+        # Fallback: copy previous day with same times but sort by priority
+        suggestion = []
+        for t in sorted(source_tasks, key=lambda x: ({"P1":0,"P2":1,"P3":2,"P4":3,"P5":4}.get(x.get("priority","P3"),2), x.get("start_time","00:00"))):
+            suggestion.append({"name": t["name"], "start_time": t["start_time"], "end_time": t["end_time"], "priority": t.get("priority","P2"), "energy": t.get("energy","Med")})
+        reasoning = "Copied previous day pattern (Gemini unavailable)."
+
+    return jsonify({"suggestion": suggestion, "source_date": source_date, "tomorrow": tomorrow_str, "has_existing": bool(existing_tomorrow), "ai": ai, "reasoning": reasoning})
+
+
+@app.route("/api/timetable/apply-tomorrow", methods=["POST"])
+@login_required
+def api_apply_tomorrow():
+    """Apply the suggestion (or custom list) to tomorrow."""
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    tomorrow = (datetime.now().date() + timedelta(days=1)).strftime("%Y-%m-%d")
+    # Allow client to send custom edited list; else auto-generate via suggest logic
+    to_create = data.get("suggestion")
+    if to_create is None:
+        # Call suggest logic inline (avoid HTTP round-trip)
+        # Reuse same fallback: previous day copy
+        today = datetime.now().date()
+        source_tasks=[]
+        for offset in range(0,7):
+            ds = (today - timedelta(days=offset)).strftime("%Y-%m-%d")
+            cand=[t for t in user.get("tasks",[]) if t.get("date")==ds and not t.get("is_syllabus")]
+            if cand:
+                source_tasks=cand
+                break
+        to_create=[{"name":t["name"],"start_time":t["start_time"],"end_time":t["end_time"],"priority":t.get("priority","P2"),"energy":t.get("energy","Med")} for t in source_tasks]
+
+    created=[]
+    for it in (to_create or []):
+        # skip if already exists tomorrow with same name+time to avoid dup on re-apply
+        exists=False
+        for t in user.get("tasks",[]):
+            if t.get("date")==tomorrow and t.get("name")==it.get("name") and t.get("start_time")==it.get("start_time"):
+                exists=True; break
+        if exists: continue
+        task={"id": str(uuid.uuid4())[:8], "name": it.get("name","Untitled"), "start_time": it.get("start_time","09:00"), "end_time": it.get("end_time","10:00"), "priority": it.get("priority","P2"), "energy": it.get("energy","Med"), "date": tomorrow, "completed": False, "healed": False}
+        user.setdefault("tasks",[]).append(task)
+        created.append(task)
+    return jsonify({"ok": True, "created": len(created), "tomorrow": tomorrow, "tasks": created})
+
+
 @app.route("/api/learning/status", methods=["GET"])
 @login_required
 def api_learning_status():
