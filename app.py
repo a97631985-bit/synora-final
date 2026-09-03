@@ -190,6 +190,7 @@ class User(db.Model):
     current_energy = db.Column(db.String(20), default="Active")
     last_taunt = db.Column(db.Text, nullable=True)
     _history_seeded = db.Column(db.Boolean, default=False)
+    is_active = db.Column(db.Boolean, default=True)
     # JSON blobs for flexible learning data — also stores tasks/focus/plans for legacy compat
     learning_data = db.Column(MutableDict.as_mutable(db.JSON), default=lambda: {
         "energy_reports": [], "completion_patterns": [], "focus_sessions_detailed": [],
@@ -336,6 +337,30 @@ class SyllabusPlan(db.Model):
 # Create tables on startup
 with app.app_context():
     db.create_all()
+
+    # --- Lightweight auto-migration -------------------------------
+    # db.create_all() only creates missing tables, NOT missing columns
+    # on existing tables. Add new columns here when the model evolves so
+    # existing SQLite/Postgres DBs get patched + backfilled automatically.
+    # (Keeps zero-dependency deploys simple until a full Alembic setup.)
+    def _ensure_column(table, column, ddl):
+        from sqlalchemy import inspect as sa_inspect, text
+        insp = sa_inspect(db.engine)
+        if column not in [c["name"] for c in insp.get_columns(table)]:
+            with db.engine.begin() as conn:
+                conn.execute(text(ddl))
+            print(f"[MIGRATE] added {table}.{column}")
+
+    _ensure_column("users", "is_active", "ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE")
+
+    # Backfill is_active = True for any existing rows that might be NULL
+    from sqlalchemy import text as _t
+    try:
+        with db.engine.begin() as conn:
+            conn.execute(_t("UPDATE users SET is_active = TRUE WHERE is_active IS NULL"))
+    except Exception as _e:
+        print(f"[MIGRATE] backfill skipped: {_e}")
+
 
 
 def _hash_password(plain):
@@ -724,7 +749,15 @@ def current_user():
     email = session.get("email")
     if not email:
         return None
-    return User.query.filter_by(email=email).first()
+    user = User.query.filter_by(email=email).first()
+    if user is None:
+        return None
+    # Enforce account status: a disabled user is treated as logged-out so the
+    # session can't keep using protected routes after admin deactivation.
+    if user.is_active is False:
+        session.clear()
+        return None
+    return user
 
 
 # ---------------------------------------------------------------------------
@@ -824,6 +857,13 @@ def login_required(view):
             if request.path.startswith("/api/"):
                 return jsonify({"error": "Login required"}), 401
             return redirect(url_for("login_page"))
+        # If the session was cleared (e.g. account disabled/deleted mid-session),
+        # treat as logged out instead of letting the view crash on a None user.
+        if current_user() is None:
+            session.clear()
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Login required"}), 401
+            return redirect(url_for("login_page"))
         return view(*args, **kwargs)
     return wrapper
 
@@ -855,25 +895,77 @@ def admin_panel():
     expected = os.environ.get("ADMIN_KEY", "synora-admin-2026")
     if key != expected:
         return f'''<div style="display:flex;min-height:100vh;align-items:center;justify-content:center;background:#111415;color:#e1e3e4;font-family:system-ui"><form style="background:#191c1d;padding:32px;border-radius:16px;border:1px solid rgba(255,255,255,0.08);text-align:center"><h2 style="color:#9ad3b6">Admin Access</h2><p style="color:#8a938c;font-size:13px">Enter admin key to view user data</p><input name="key" placeholder="ADMIN_KEY" style="width:100%;margin:12px 0;padding:10px 14px;border-radius:10px;background:#0c0f10;border:1px solid rgba(138,147,140,0.3);color:#e1e3e4"/><br><button type="submit" style="width:100%;padding:10px;background:#9ad3b6;color:#003825;border:none;border-radius:10px;font-weight:700">Unlock</button><p style="font-size:11px;color:#8a938c;margin-top:10px">Default local key: <code>synora-admin-2026</code></p></form></div>''', 401
-    users = User.query.order_by(User.created_at.desc()).all()
-    # Build simple HTML table (no template needed for quick view)
-    rows = ""
+
+    # --- Search + filter + pagination ---
+    q = (request.args.get("q") or "").strip()
+    f = (request.args.get("f") or "all").strip()
+    page = max(1, int(request.args.get("page") or 1))
+    PER = 25
+
+    query = User.query
+    if f == "active":
+        query = query.filter((User.is_active.is_(None)) | (User.is_active.is_(True)))
+    elif f == "disabled":
+        query = query.filter(User.is_active.is_(False))
+
+    if q:
+        like = f"%{q}%"
+        query = query.filter(
+            (User.username.ilike(like)) | (User.email.ilike(like)) | (User.phone.ilike(like))
+        )
+
+    total = query.count()
+    pages = max(1, (total + PER - 1) // PER)
+    users = query.order_by(User.created_at.desc()).offset((page - 1) * PER).limit(PER).all()
+
+    # Stats
+    all_users = User.query.all()
+    now = datetime.utcnow()
+    new_today = sum(1 for u in all_users if u.created_at and u.created_at.date() == now.date())
+    verified = sum(1 for u in all_users if u.email_verified)
+    active_count = sum(1 for u in all_users if u.is_active is not False)
+    disabled_count = sum(1 for u in all_users if u.is_active is False)
+    total_tasks = sum(len(u.tasks_data or []) for u in all_users)
+
+    urows = []
     for u in users:
         tasks = u.tasks_data or []
-        focus = u.focus_data or []
-        total_tasks = len(tasks)
-        done = len([t for t in tasks if t.get("completed")])
-        rows += f"<tr style='border-bottom:1px solid rgba(255,255,255,0.06)'><td style='padding:10px'>{u.id}</td><td style='padding:10px;font-weight:600'>{u.username}</td><td style='padding:10px'>{u.email}</td><td style='padding:10px'>{u.phone or '-'}</td><td style='padding:10px'>{u.exam_goal or '-'}</td><td style='padding:10px'>{u.study_level or '-'}</td><td style='padding:10px'>{total_tasks} ({done} done)</td><td style='padding:10px'>{len(focus)}</td><td style='padding:10px'>{u.created_at.strftime('%Y-%m-%d %H:%M') if u.created_at else '-'}</td><td style='padding:10px'><span style='padding:3px 8px;border-radius:99px;font-size:11px;background:{'#9ad3b61a' if u.email_verified else '#ff8a651a'};border:1px solid rgba(255,255,255,0.08)'>{ '✓' if u.email_verified else '✗'} Email</span> <span style='padding:3px 8px;border-radius:99px;font-size:11px;background:{'#9ad3b61a' if u.phone_verified else '#ff8a651a'};border:1px solid rgba(255,255,255,0.08)'>{ '✓' if u.phone_verified else '✗'} Phone</span></td></tr>"
-    return f"""
-    <html class="dark"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Synora Admin</title></head>
-    <body style="background:#111415;color:#e1e3e4;font-family:system-ui;padding:24px">
-    <h1 style="color:#9ad3b6">Synora — User Database <span style="font-size:12px;color:#8a938c">({len(users)} users)</span></h1>
-    <p style="color:#8a938c;font-size:13px">Local SQLite: <code>instance/synora.db</code> • Render Postgres: <code>DATABASE_URL</code> • Export: <a href="/admin/export?key={expected}" style="color:#4cd7f6">Download JSON</a></p>
-    <div style="overflow:auto;background:#191c1d;border-radius:16px;border:1px solid rgba(255,255,255,0.06);margin-top:16px">
-    <table style="width:100%;border-collapse:collapse;font-size:13px"><thead style="background:rgba(154,211,182,0.08);text-align:left"><tr><th style="padding:10px">ID</th><th style="padding:10px">Name</th><th style="padding:10px">Email</th><th style="padding:10px">Phone</th><th style="padding:10px">Exam</th><th style="padding:10px">Level</th><th style="padding:10px">Tasks</th><th style="padding:10px">Focus</th><th style="padding:10px">Created</th><th style="padding:10px">Verified</th></tr></thead><tbody>{rows or '<tr><td colspan=10 style="padding:24px;text-align:center;color:#8a938c">No users yet — create via /signup</td></tr>'}</tbody></table></div>
-    <p style="margin-top:16px;font-size:12px;color:#8a938c">Tip: Local me DB Browser for SQLite se <code>instance/synora.db</code> khol ke bhi dekh sakte ho. Render pe Dashboard → Postgres → Connect → psql.</p>
-    </body></html>
-    """
+        urows.append({
+            "id": u.id, "username": u.username, "email": u.email, "phone": u.phone or "-",
+            "exam_goal": u.exam_goal or "-", "total_tasks": len(tasks),
+            "done": len([t for t in tasks if t.get("completed")]),
+            "focus_count": len(u.focus_data or []),
+            "created_display": u.created_at.strftime("%Y-%m-%d %H:%M") if u.created_at else "-",
+            "email_verified": u.email_verified, "phone_verified": u.phone_verified,
+            "is_active": u.is_active,
+        })
+
+    return render_template("admin.html", users=urows, total=total, pages=pages, page=page,
+                           q=q, f=f, key=key, new_today=new_today, verified=verified,
+                           active_count=active_count, disabled_count=disabled_count,
+                           total_tasks=total_tasks)
+
+
+@app.route("/admin/user/<int:user_id>/toggle", methods=["POST"])
+def admin_toggle_user(user_id):
+    key = request.args.get("key") or request.headers.get("X-Admin-Key")
+    expected = os.environ.get("ADMIN_KEY", "synora-admin-2026")
+    if key != expected:
+        return jsonify({"error": "Unauthorized"}), 401
+    data = request.get_json(silent=True) or {}
+    action = data.get("action")  # "disable" or "enable"
+    user = db.session.get(User, user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    if action == "disable":
+        user.is_active = False
+        db.session.commit()
+        return jsonify({"ok": True, "message": f"Disabled {user.username}"})
+    elif action == "enable":
+        user.is_active = True
+        db.session.commit()
+        return jsonify({"ok": True, "message": f"Enabled {user.username}"})
+    return jsonify({"error": "Invalid action"}), 400
 
 @app.route("/admin/export")
 def admin_export():
@@ -2793,6 +2885,8 @@ def login_post():
         user = User.query.filter_by(phone=raw).first()
     if not user or not _check_password(user.password, password):
         return render_template("login_new.html", error="Invalid email/phone or password")
+    if user.is_active is False:
+        return render_template("login_new.html", error="This account has been disabled by an administrator. Contact support@syntaxora.app.")
     session["email"] = user.email
     session["username"] = user.username
     return redirect(url_for("dashboard"))
@@ -2862,6 +2956,8 @@ def auth_verify_otp():
             db.session.add(user)
             db.session.commit()
         else:
+            if user.is_active is False:
+                return jsonify({"error": "This account has been disabled by an administrator"}), 403
             if kind=="email":
                 user.email_verified = True
             else:
@@ -2888,6 +2984,8 @@ def auth_google():
     if picture and not picture.startswith("https://"):
         picture = ""  # avoid exfil/injection via arbitrary scheme
     user = User.query.filter_by(email=email).first()
+    if user and user.is_active is False:
+        return jsonify({"error": "This account has been disabled by an administrator"}), 403
     if not user:
         username = name or email.split("@")[0]
         if len(username) < 2:

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Synora Admin</title>
+<style>
+  :root { color-scheme: dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:#0d0f10; color:#e1e3e4; font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; }
+  .wrap { max-width:1100px; margin:0 auto; padding:24px; }
+  .top { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; margin-bottom:20px; }
+  h1 { color:#9ad3b6; margin:0; font-size:24px; }
+  .sub { color:#8a938c; font-size:13px; margin-top:4px; }
+  .logout-btn { background:none; border:1px solid rgba(255,255,255,0.15); color:#e1e3e4; padding:8px 14px; border-radius:10px; cursor:pointer; font-size:13px; text-decoration:none; }
+  .logout-btn:hover { background:rgba(255,255,255,0.06); }
+  .stats { display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:12px; margin-bottom:20px; }
+  .stat { background:#171a1b; border:1px solid rgba(255,255,255,0.07); border-radius:14px; padding:16px; }
+  .stat .n { font-size:26px; font-weight:800; color:#9ad3b6; }
+  .stat .l { font-size:12px; color:#8a938c; margin-top:2px; }
+  .toolbar { display:flex; align-items:center; gap:10px; margin-bottom:16px; flex-wrap:wrap; }
+  .search { flex:1; min-width:200px; padding:10px 14px; border-radius:10px; background:#0c0f10; border:1.5px solid rgba(138,147,140,0.25); color:#e1e3e4; font-size:14px; outline:none; }
+  .search:focus { border-color:#9ad3b6; }
+  .seg { display:inline-flex; gap:4px; background:#171a1b; border:1px solid rgba(255,255,255,0.07); padding:4px; border-radius:10px; }
+  .seg button { background:none; border:none; color:#8a938c; padding:6px 12px; border-radius:7px; cursor:pointer; font-size:12px; }
+  .seg button.on { background:#9ad3b6; color:#003825; font-weight:700; }
+  .card { background:#171a1b; border:1px solid rgba(255,255,255,0.07); border-radius:14px; overflow:hidden; }
+  table { width:100%; border-collapse:collapse; font-size:13px; }
+  thead th { text-align:left; padding:11px 14px; background:rgba(154,211,182,0.08); color:#b7c4bd; font-weight:600; font-size:12px; white-space:nowrap; }
+  tbody td { padding:11px 14px; border-top:1px solid rgba(255,255,255,0.05); vertical-align:middle; }
+  tbody tr:hover { background:rgba(255,255,255,0.02); }
+  .pill { padding:3px 9px; border-radius:99px; font-size:11px; border:1px solid rgba(255,255,255,0.1); white-space:nowrap; }
+  .pill.good { background:#9ad3b61a; border-color:#9ad3b644; color:#9ad3b6; }
+  .pill.bad { background:#ff8a651a; border-color:#ff8a6544; color:#ff8a65; }
+  .pill.warn { background:#ffd1661a; border-color:#ffd16644; color:#ffd166; }
+  .act { display:flex; gap:6px; align-items:center; }
+  .btn { padding:6px 11px; border-radius:8px; border:1px solid rgba(255,255,255,0.15); background:none; color:#e1e3e4; font-size:12px; cursor:pointer; text-decoration:none; }
+  .btn:hover { background:rgba(255,255,255,0.06); }
+  .btn.danger { color:#ff8a65; border-color:#ff8a6544; }
+  .btn.danger:hover { background:#ff8a6522; }
+  .btn.ok { color:#9ad3b6; border-color:#9ad3b644; }
+  .btn.ok:hover { background:#9ad3b622; }
+  .pager { display:flex; gap:6px; justify-content:flex-end; padding:14px; align-items:center; }
+  .pager button, .pager span { font-size:12px; color:#8a938c; }
+  .pager .info { margin-right:auto; }
+  .pager button { background:none; border:1px solid rgba(255,255,255,0.15); padding:5px 11px; border-radius:8px; cursor:pointer; color:#e1e3e4; }
+  .pager button:disabled { opacity:0.4; cursor:default; }
+  .empty { padding:30px; text-align:center; color:#8a938c; font-size:13px; }
+  .muted { color:#8a938c; }
+  .status-off { text-decoration:line-through; opacity:0.6; }
+  .toast { position:fixed; bottom:20px; right:20px; background:#222728; border:1px solid #9ad3b644; color:#e1e3e4; padding:12px 18px; border-radius:12px; font-size:13px; opacity:0; transition:opacity .3s; box-shadow:0 8px 24px rgba(0,0,0,.4); z-index:50; }
+  .toast.show { opacity:1; }
+  @media (max-width:640px){ .wrap{padding:14px} thead{display:none} tbody td{display:block;border:none;padding:6px 14px} tbody td:first-child{border-top:1px solid rgba(255,255,255,.08);padding-top:10px} tbody tr{border-bottom:1px solid rgba(255,255,255,.06)} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top">
+    <div>
+      <h1>Synora — Admin Panel</h1>
+      <div class="sub">User database • {{ total }} users • {% if active_count is defined %}{{ active_count }} active{% endif %}</div>
+    </div>
+    <a href="/admin?key={{ key }}#table" class="logout-btn">↻ Refresh</a>
+  </div>
+
+  <div class="stats">
+    <div class="stat"><div class="n">{{ total }}</div><div class="l">Total users</div></div>
+    <div class="stat"><div class="n">{{ new_today }}</div><div class="l">New today</div></div>
+    <div class="stat"><div class="n">{{ verified }}</div><div class="l">Email-verified</div></div>
+    <div class="stat"><div class="n">{{ active_count }}</div><div class="l">Active</div></div>
+    <div class="stat"><div class="n">{{ disabled_count }}</div><div class="l">Disabled</div></div>
+    <div class="stat"><div class="n">{{ total_tasks }}</div><div class="l">Total tasks</div></div>
+  </div>
+
+  <div class="toolbar" id="table">
+    <input class="search" id="q" placeholder="Search by name, email or phone…" value="{{ q }}">
+    <div class="seg" id="seg">
+      <button data-f="all" class="{{ 'on' if not f or f=='all' else '' }}">All</button>
+      <button data-f="active" class="{{ 'on' if f=='active' else '' }}">Active</button>
+      <button data-f="disabled" class="{{ 'on' if f=='disabled' else '' }}">Disabled</button>
+    </div>
+    <a class="btn" href="/admin/export?key={{ key }}" style="padding:9px 13px">Export JSON</a>
+  </div>
+
+  <div class="card">
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Exam</th><th>Tasks</th><th>Focus</th><th>Created</th><th>Verified</th><th>Status</th><th style="text-align:right">Action</th>
+        </tr>
+      </thead>
+      <tbody id="rows">
+        {% for u in users %}
+        <tr data-id="{{ u.id }}" class="{{ 'status-off' if u.is_active is sameas false else '' }}">
+          <td class="muted">{{ u.id }}</td>
+          <td style="font-weight:600">{{ u.username }}</td>
+          <td class="muted">{{ u.email }}</td>
+          <td class="muted">{{ u.phone or '-' }}</td>
+          <td class="muted">{{ u.exam_goal or '-' }}</td>
+          <td>{{ u.total_tasks }} <span class="muted">({{ u.done }} ✓)</span></td>
+          <td class="muted">{{ u.focus_count }}</td>
+          <td class="muted">{{ u.created_display }}</td>
+          <td>
+            <span class="pill {{ 'good' if u.email_verified else 'bad' }}">{{ '✓' if u.email_verified else '✗' }} Email</span>
+            <span class="pill {{ 'good' if u.phone_verified else 'bad' }}">{{ '✓' if u.phone_verified else '✗' }} Phone</span>
+          </td>
+          <td><span class="pill {{ 'good' if u.is_active else 'warn' }}">{{ 'Active' if u.is_active else 'Disabled' }}</span></td>
+          <td style="text-align:right">
+            <div class="act" style="justify-content:flex-end">
+              {% if u.is_active %}
+              <button class="btn danger" data-id="{{ u.id }}" data-action="disable">Disable</button>
+              {% else %}
+              <button class="btn ok" data-id="{{ u.id }}" data-action="enable">Enable</button>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% else %}
+        <tr><td colspan="11"><div class="empty">No users matched.</div></td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <div class="pager">
+      <span class="info">Page {{ page }} of {{ pages or 1 }} • {{ total }} users</span>
+      {% if page > 1 %}<a class="btn" href="/admin?key={{ key }}&page={{ page-1 }}&q={{ q }}&f={{ f }}">Prev</a>{% endif %}
+      {% if page < pages %}<a class="btn" href="/admin?key={{ key }}&page={{ page+1 }}&q={{ q }}&f={{ f }}">Next</a>{% endif %}
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const KEY = {{ key|tojson }};
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.classList.add('show'); setTimeout(()=>t.classList.remove('show'),2500); }
+
+// Live search (client-side filter over the current page rows)
+const box = document.getElementById('q');
+box.addEventListener('input', ()=>{
+  const term = box.value.toLowerCase().trim();
+  document.querySelectorAll('#rows tr').forEach(tr=>{
+    const hit = tr.textContent.toLowerCase().includes(term);
+    tr.style.display = hit ? '' : 'none';
+  });
+});
+
+// Segment filter -> reload with ?f=
+document.getElementById('seg').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  const f = b.dataset.f;
+  const url = new URL(window.location.href);
+  url.searchParams.set('f', f); url.searchParams.set('page', 1); url.searchParams.delete('q');
+  window.location.href = url.toString();
+});
+
+// Disable/Enable actions
+document.getElementById('rows').addEventListener('click', e=>{
+  const btn = e.target.closest('[data-action]'); if(!btn) return;
+  const id = btn.dataset.id, action = btn.dataset.action;
+  if(!confirm((action==='disable'?'Disable':'Enable') + ' this user?')) return;
+  fetch('/admin/user/'+id+'/toggle', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json','X-Admin-Key': KEY},
+    body: JSON.stringify({action: action})
+  }).then(r=>r.json()).then(res=>{
+    if(res.ok){ toast(res.message); setTimeout(()=>location.reload(), 500); }
+    else toast(res.error || 'Failed');
+  }).catch(()=>toast('Network error'));
+});
+</script>
+</body></html>
