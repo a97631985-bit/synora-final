@@ -47,6 +47,22 @@
 
   <!-- Footer -->
   <div class="mt-auto px-3 pb-5 space-y-3 border-t border-white/5 pt-4">
+    <div class="flex items-center justify-between px-1 pt-1">
+      <button onclick="window.location.href='/profile'" class="flex items-center gap-2 text-left hover:opacity-80 transition-opacity">
+        <span class="w-8 h-8 rounded-full synora-gradient flex items-center justify-center text-on-primary text-sm font-bold shrink-0">
+          {{ (session.username or 'S')[:1]|upper }}
+        </span>
+        <span class="text-on-surface-variant text-sm font-semibold max-w-[120px] truncate hover:text-on-surface transition-colors">{{ session.username or 'Guest' }}</span>
+      </button>
+      <div class="flex gap-1">
+        <a href="/profile" title="Profile" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-primary hover:bg-white/5 transition-all">
+          <span class="material-symbols-outlined text-[18px]">person</span>
+        </a>
+        <a href="/logout" title="Log out" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-error hover:bg-white/5 transition-all">
+          <span class="material-symbols-outlined text-[18px]">logout</span>
+        </a>
+      </div>
+    </div>
     <div class="flex items-center justify-between px-2">
       <span class="flex items-center gap-2 text-on-surface-variant text-sm font-semibold">
         <span class="material-symbols-outlined text-[18px]">dark_mode</span> Dark Mode

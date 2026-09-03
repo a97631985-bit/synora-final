@@ -95,6 +95,8 @@ class User(db.Model):
     onboarded = db.Column(db.Boolean, default=False)
     auth_provider = db.Column(db.String(20), default="email")  # email/google/phone
     photo_url = db.Column(db.String(500), nullable=True)
+    password_reset_token = db.Column(db.String(200), nullable=True)
+    password_reset_expires = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     current_energy = db.Column(db.String(20), default="Active")
     last_taunt = db.Column(db.Text, nullable=True)
@@ -2757,6 +2759,209 @@ def auth_google():
     session["email"] = user.email
     session["username"] = user.username
     return jsonify({"ok": True})
+
+
+# ---------------------------------------------------------------------------
+# Error handlers — clean branded pages instead of ugly stack traces
+# ---------------------------------------------------------------------------
+@app.errorhandler(404)
+def not_found(e):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Not found"}), 404
+    return render_template("error.html", code=404, title="Page Not Found",
+                           message="The page you're looking for doesn't exist or was moved."), 404
+
+@app.errorhandler(405)
+def method_not_allowed(e):
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Method not allowed"}), 405
+    return render_template("error.html", code=405, title="Method Not Allowed",
+                           message="This action isn't allowed here."), 405
+
+@app.errorhandler(413)
+def too_large(e):
+    return jsonify({"error": "File too large (max 16MB)"}), 413
+
+@app.errorhandler(500)
+def server_error(e):
+    # Log the real error for debugging, but never show details to the user
+    import traceback
+    traceback.print_exc()
+    db.session.rollback()
+    if request.path.startswith("/api/"):
+        return jsonify({"error": "Something went wrong on our side. Please try again."}), 500
+    return render_template("error.html", code=500, title="Something Went Wrong",
+                           message="An unexpected error occurred. Please try again in a moment."), 500
+
+
+# ---------------------------------------------------------------------------
+# Legal pages — Terms of Service & Privacy Policy
+# ---------------------------------------------------------------------------
+@app.route("/terms")
+def terms():
+    return render_template("terms.html")
+
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html")
+
+
+# ---------------------------------------------------------------------------
+# Profile page — user can view/update their own data
+# ---------------------------------------------------------------------------
+@app.route("/profile")
+@login_required
+def profile_page():
+    user = current_user()
+    return render_template("profile.html", user=user)
+
+@app.route("/profile", methods=["POST"])
+@login_required
+def profile_update():
+    user = current_user()
+    username = (request.form.get("username") or "").strip()
+    school = (request.form.get("school") or "").strip() or None
+    exam_goal = (request.form.get("exam_goal") or "").strip() or None
+    study_level = (request.form.get("study_level") or "").strip() or None
+    daily_hours = request.form.get("daily_hours")
+    age = request.form.get("age")
+    try:
+        daily_hours = int(daily_hours) if daily_hours else None
+    except Exception:
+        daily_hours = None
+    try:
+        age = int(age) if age else None
+    except Exception:
+        age = None
+    if username:
+        user.username = username
+    if school is not None:
+        user.school = school
+    if exam_goal is not None:
+        user.exam_goal = exam_goal
+    if study_level is not None:
+        user.study_level = study_level
+    if daily_hours is not None:
+        user.daily_hours = daily_hours
+    user.age = age
+    user.onboarded = bool(user.exam_goal or user.study_level)
+    db.session.commit()
+    return redirect(url_for("profile_page"))
+
+
+# ---------------------------------------------------------------------------
+# Forgot / change password flow
+# ---------------------------------------------------------------------------
+@app.route("/forgot-password", methods=["GET"])
+def forgot_password():
+    return render_template("forgot_password.html")
+
+
+@app.route("/forgot-password", methods=["POST"])
+def forgot_password_post():
+    email = (request.form.get("email") or "").strip().lower()
+    if not email:
+        return render_template("forgot_password.html", error="Please enter your email")
+    user = User.query.filter_by(email=email).first()
+    # Always show a generic message to avoid revealing whether an email exists
+    # (prevents account enumeration).
+    if not user:
+        return render_template("forgot_password_done.html", email=email, sent=False)
+    # Generate a reset token tied to this user
+    token = uuid.uuid4().hex
+    user.password_reset_token = token
+    user.password_reset_expires = datetime.utcnow() + timedelta(minutes=30)
+    db.session.commit()
+    # Build a reset link from the current host
+    reset_link = url_for("reset_password", token=token, _external=True)
+    delivery = "demo"
+    try:
+        # Send reset email (works with Gmail SMTP if configured, else demo)
+        if os.environ.get("MAIL_EMAIL"):
+            import smtplib
+            from email.mime.text import MIMEText
+            from email.mime.multipart import MIMEMultipart
+            sender = os.environ.get("MAIL_EMAIL")
+            body = f"Hello {user.username},\n\nReset your Synora password using this link (valid 30 min):\n{reset_link}\n\nIf you didn't request this, ignore this email."
+            msg = MIMEMultipart("alternative")
+            msg["Subject"] = "Reset your Synora password"
+            msg["From"] = f"Synora AI <{sender}>"
+            msg["To"] = email
+            msg.attach(MIMEText(body, "plain"))
+            server = smtplib.SMTP(os.environ.get("MAIL_SMTP", "smtp.gmail.com"), int(os.environ.get("MAIL_PORT", "587")))
+            server.ehlo(); server.starttls(); server.ehlo()
+            server.login(sender, os.environ.get("MAIL_PASSWORD", ""))
+            server.sendmail(sender, [email], msg.as_string())
+            server.quit()
+            delivery = "sent"
+        else:
+            delivery = "demo"
+    except Exception as e:
+        print(f"[RESET-EMAIL] failed: {e}")
+        delivery = "demo"
+    print(f"[RESET] {email} token={token} delivery={delivery}")
+    return render_template("forgot_password_done.html", email=email, sent=(delivery == "sent"),
+                           demo_link=reset_link if delivery == "demo" else None)
+
+
+# ---------------------------------------------------------------------------
+# Change password (for logged-in users) — from /profile
+# ---------------------------------------------------------------------------
+@app.route("/password", methods=["GET"])
+@login_required
+def change_password_page():
+    return render_template("change_password.html")
+
+@app.route("/password", methods=["POST"])
+@login_required
+def change_password_post():
+    user = current_user()
+    current_pwd = request.form.get("current_password") or ""
+    new_pwd = request.form.get("new_password") or ""
+    confirm = request.form.get("confirm") or ""
+    # Only enforce current password if the user actually has one set
+    if user.password and not _check_password(user.password, current_pwd):
+        return render_template("change_password.html", error="Current password is incorrect")
+    if len(new_pwd) < 6:
+        return render_template("change_password.html", error="New password must be at least 6 characters")
+    if new_pwd != confirm:
+        return render_template("change_password.html", error="New passwords do not match")
+    user.password = _hash_password(new_pwd)
+    db.session.commit()
+    return render_template("change_password.html", success=True)
+
+
+@app.route("/reset-password/<token>", methods=["GET"])
+def reset_password(token):
+    user = User.query.filter_by(password_reset_token=token).first()
+    if not user:
+        return render_template("error.html", code=400, title="Invalid or Expired Link",
+                               message="This password reset link is invalid or has expired. Please request a new one."), 400
+    if not user.password_reset_expires or datetime.utcnow() > user.password_reset_expires:
+        return render_template("error.html", code=400, title="Link Expired",
+                               message="This password reset link has expired. Please request a new one."), 400
+    return render_template("reset_password.html", token=token)
+
+@app.route("/reset-password/<token>", methods=["POST"])
+def reset_password_post(token):
+    user = User.query.filter_by(password_reset_token=token).first()
+    if not user:
+        return render_template("error.html", code=400, title="Invalid or Expired Link",
+                               message="This password reset link is invalid or has expired."), 400
+    if not user.password_reset_expires or datetime.utcnow() > user.password_reset_expires:
+        return render_template("error.html", code=400, title="Link Expired",
+                               message="This password reset link has expired."), 400
+    password = request.form.get("password") or ""
+    confirm = request.form.get("confirm") or ""
+    if len(password) < 6:
+        return render_template("reset_password.html", token=token, error="Password must be at least 6 characters")
+    if password != confirm:
+        return render_template("reset_password.html", token=token, error="Passwords do not match")
+    user.password = _hash_password(password)
+    user.password_reset_token = None
+    user.password_reset_expires = None
+    db.session.commit()
+    return render_template("reset_password_done.html")
 
 
 if __name__ == "__main__":

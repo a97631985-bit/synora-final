@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>{% include "head.html" %}</head>
+<body class="bg-background text-on-surface antialiased">
+<div class="ambient-bg"></div>
+<style>
+  .pw { max-width:720px; margin:0 auto; padding:2rem 1.5rem; position:relative; z-index:10; }
+  .card { background:rgba(25,28,29,0.6); border:1px solid rgba(255,255,255,0.06); border-radius:20px; padding:1.5rem; }
+  .field label { display:block; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.08em; color:#8a938c; margin-bottom:6px; }
+  .field select, .field input {
+    width:100%; padding:12px 14px; border-radius:12px; font-size:0.9rem; color:#e1e3e4;
+    background:rgba(12,15,16,0.8); border:1.5px solid rgba(138,147,140,0.2); outline:none;
+    font-family:inherit; color-scheme:dark; transition:all 0.3s;
+  }
+  .field select:focus, .field input:focus { border-color:#9ad3b6; box-shadow:0 0 0 3px rgba(154,211,182,0.1); }
+  .field select option { background:#191c1d; }
+  .badge { padding:4px 12px; border-radius:99px; font-size:0.72rem; font-weight:600; }
+</style>
+<main class="pw">
+  <div class="flex items-center justify-between mb-6">
+    <div class="flex items-center gap-3">
+      <a href="/dashboard" class="w-9 h-9 rounded-full glass-panel flex items-center justify-center hover:text-primary transition-all"><span class="material-symbols-outlined">arrow_back</span></a>
+      <h1 class="text-2xl font-bold">Your Profile</h1>
+    </div>
+    <a href="/logout" class="btn-primary px-4 py-2 rounded-xl text-sm" style="display:flex; align-items:center; gap:6px; text-decoration:none">
+      <span class="material-symbols-outlined" style="font-size:16px">logout</span> Log out
+    </a>
+  </div>
+
+  <!-- Identity -->
+  <div class="card mb-4 flex items-center gap-4">
+    <div class="w-16 h-16 rounded-full flex items-center justify-center text-2xl font-bold text-on-primary synora-gradient shrink-0">
+      {{ user.username[:1]|upper }}
+    </div>
+    <div class="flex-1 min-w-0">
+      <div class="text-lg font-bold truncate">{{ user.username }}</div>
+      <div class="text-sm text-on-surface-variant truncate">{{ user.email }}</div>
+    </div>
+    <div class="text-xs text-on-surface-variant text-right shrink-0">
+      {% if user.email_verified %}<span class="badge text-primary" style="background:rgba(154,211,182,0.1); border:1px solid rgba(154,211,182,0.2)">✓ Email</span>{% endif %}
+      {% if user.phone_verified %}<span class="badge text-tertiary" style="background:rgba(76,215,246,0.1); border:1px solid rgba(76,215,246,0.2); margin-left:4px">✓ Phone</span>{% endif %}
+    </div>
+  </div>
+
+  <!-- Edit form -->
+  <form action="/profile" method="POST" class="card space-y-4">
+    <h2 class="font-bold text-lg flex items-center gap-2"><span class="material-symbols-outlined text-primary">edit</span> Edit Details</h2>
+    <div class="field">
+      <label>Full Name</label>
+      <input name="username" value="{{ user.username }}">
+    </div>
+    <div class="grid grid-cols-2 gap-4">
+      <div class="field">
+        <label>Age</label>
+        <input name="age" type="number" min="10" max="80" value="{{ user.age or '' }}" placeholder="18">
+      </div>
+      <div class="field">
+        <label>School / College</label>
+        <input name="school" value="{{ user.school or '' }}" placeholder="FIITJEE / DU">
+      </div>
+    </div>
+    <div class="field">
+      <label>Target Exam</label>
+      <select name="exam_goal">
+        <option value="">Select</option>
+        {% for opt in ['JEE Main + Advanced','NEET','GATE','UPSC CSE','SSC CGL','Banking (IBPS)','CBSE Class 12','CUET','State Board','Other'] %}
+          <option value="{{ opt }}" {{ 'selected' if user.exam_goal == opt else '' }}>{{ opt }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div class="grid grid-cols-2 gap-4">
+      <div class="field">
+        <label>Study Level</label>
+        <select name="study_level">
+          <option value="">Select</option>
+          {% for opt in ['Class 11','Class 12','Dropper / Gap Year','College Fresher','Working Professional'] %}
+            <option value="{{ opt }}" {{ 'selected' if user.study_level == opt else '' }}>{{ opt }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="field">
+        <label>Daily Hours</label>
+        <select name="daily_hours">
+          {% for opt in [3,4,6,8,10] %}
+            <option value="{{ opt }}" {{ 'selected' if user.daily_hours == opt else '' }}>{{ opt }} hours</option>
+          {% endfor %}
+        </select>
+      </div>
+    </div>
+    <button type="submit" class="btn-primary mt-2" style="display:flex; align-items:center; justify-content:center; gap:8px">
+      <span class="material-symbols-outlined" style="font-size:18px">save</span> Save Changes
+    </button>
+  </form>
+
+  <div class="flex flex-wrap gap-4 mt-6 text-sm text-on-surface-variant">
+    <a href="/password" class="hover:text-primary transition-colors flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">lock</span> Change password</a>
+    <a href="/terms" class="hover:text-primary transition-colors">Terms</a>
+    <a href="/privacy" class="hover:text-primary transition-colors">Privacy</a>
+  </div>
+</main>
+</body></html>
