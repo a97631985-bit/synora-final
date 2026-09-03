@@ -1,143 +1,465 @@
 <!DOCTYPE html>
 <html class="dark" lang="en">
-<head>{% include "head.html" %}</head>
-<body class="bg-background text-on-surface min-h-screen flex flex-col items-center relative overflow-hidden antialiased">
-<div class="ambient-bg"></div>
-<main class="w-full max-w-lg px-4 md:px-0 relative z-10 py-8">
-  <div class="flex justify-center mb-6"><img src="/static/logo.png" alt="Synora" class="h-10 w-auto"></div>
-  <div class="glass-panel rounded-2xl p-6 md:p-8 shadow-2xl relative overflow-hidden">
-    <div class="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
-    <div class="text-center mb-6">
-      <h1 class="text-2xl font-bold tracking-[-0.03em]">Create your Synora account</h1>
-      <p class="text-on-surface-variant text-sm mt-1">Personalized timetable • AI healing • progress tracking</p>
+<head>
+{% include "head.html" %}
+<style>
+  @keyframes float1 { 0%,100%{transform:translateY(0) rotate(0deg)} 50%{transform:translateY(-20px) rotate(5deg)} }
+  @keyframes float2 { 0%,100%{transform:translateY(0) rotate(0deg)} 50%{transform:translateY(-15px) rotate(-5deg)} }
+  @keyframes float3 { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-25px)} }
+  @keyframes pulse-ring { 0%{transform:scale(0.8);opacity:0.5} 50%{transform:scale(1.1);opacity:0.2} 100%{transform:scale(0.8);opacity:0.5} }
+  @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
+  @keyframes slideRight { from{opacity:0;transform:translateX(-20px)} to{opacity:1;transform:translateX(0)} }
+  @keyframes gradientShift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
+  @keyframes checkPop { 0%{transform:scale(0)} 50%{transform:scale(1.2)} 100%{transform:scale(1)} }
+  @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
+  @keyframes fadeIn { from{opacity:0} to{opacity:1} }
+
+  .split-layout { display:flex; min-height:100vh; }
+  .split-left {
+    flex:1; display:flex; flex-direction:column; align-items:center; justify-content:center;
+    background: linear-gradient(135deg, #0a1a12 0%, #111415 50%, #0d1520 100%);
+    position:relative; overflow:hidden; padding:3rem;
+  }
+  .split-left::before {
+    content:''; position:absolute; inset:0;
+    background: radial-gradient(circle at 30% 40%, rgba(154,211,182,0.12) 0%, transparent 60%),
+                radial-gradient(circle at 70% 80%, rgba(76,215,246,0.08) 0%, transparent 50%);
+  }
+  .split-right {
+    flex:1; display:flex; align-items:center; justify-content:center;
+    background: #111415; position:relative; padding:2rem;
+  }
+
+  .floating-shape {
+    position:absolute; border-radius:50%; filter:blur(1px); opacity:0.15;
+  }
+  .shape-1 { width:80px; height:80px; background:#9ad3b6; top:15%; left:20%; animation:float1 6s ease-in-out infinite; }
+  .shape-2 { width:50px; height:50px; background:#4cd7f6; top:60%; left:15%; animation:float2 8s ease-in-out infinite 1s; }
+  .shape-3 { width:120px; height:120px; background:#6f00be; top:25%; right:10%; animation:float3 7s ease-in-out infinite 0.5s; opacity:0.08; }
+  .shape-4 { width:40px; height:40px; background:#9ad3b6; bottom:20%; right:25%; animation:float1 5s ease-in-out infinite 2s; }
+  .shape-5 { width:60px; height:60px; background:#4cd7f6; bottom:35%; left:30%; animation:float2 9s ease-in-out infinite 1.5s; opacity:0.1; }
+  .pulse-ring-1 {
+    width:300px; height:300px; border:2px solid rgba(154,211,182,0.15); border-radius:50%;
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    animation: pulse-ring 4s ease-in-out infinite;
+  }
+  .pulse-ring-2 {
+    width:400px; height:400px; border:1px solid rgba(76,215,246,0.08); border-radius:50%;
+    position:absolute; top:50%; left:50%; transform:translate(-50%,-50%);
+    animation: pulse-ring 5s ease-in-out infinite 1s;
+  }
+
+  .brand-content { position:relative; z-index:2; text-align:center; max-width:380px; }
+  .brand-content .logo { height:70px; margin-bottom:2rem; filter:drop-shadow(0 0 20px rgba(154,211,182,0.3)); }
+  .brand-content h2 { font-size:2rem; font-weight:800; line-height:1.2; margin-bottom:1rem;
+    background: linear-gradient(135deg, #9ad3b6, #4cd7f6); -webkit-background-clip:text; -webkit-text-fill-color:transparent; }
+  .brand-content p { color:#8a938c; font-size:0.95rem; line-height:1.7; }
+
+  .feature-pill {
+    display:inline-flex; align-items:center; gap:6px; padding:6px 14px; border-radius:99px;
+    background:rgba(154,211,182,0.08); border:1px solid rgba(154,211,182,0.15);
+    font-size:0.75rem; color:#9ad3b6; font-weight:600; margin:4px;
+    animation: slideRight 0.5s ease-out both;
+  }
+  .feature-pill:nth-child(2) { animation-delay:0.1s; }
+  .feature-pill:nth-child(3) { animation-delay:0.2s; }
+  .feature-pill:nth-child(4) { animation-delay:0.3s; }
+  .feature-pill .material-symbols-outlined { font-size:14px; }
+
+  .form-card {
+    width:100%; max-width:420px; position:relative;
+    animation: slideUp 0.6s ease-out;
+  }
+  .form-card .glass-panel {
+    border-radius:24px; padding:2.5rem 2rem;
+    border: 1px solid rgba(255,255,255,0.06);
+    background: rgba(25,28,29,0.7);
+    backdrop-filter: blur(30px);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4), inset 0 1px 0 rgba(255,255,255,0.05);
+  }
+
+  .step-indicator {
+    display:flex; align-items:center; gap:8px; margin-bottom:2rem;
+  }
+  .step-dot {
+    width:36px; height:36px; border-radius:50%; display:flex; align-items:center; justify-content:center;
+    font-size:0.75rem; font-weight:700; transition:all 0.4s cubic-bezier(0.4,0,0.2,1);
+    border:2px solid rgba(138,147,140,0.3); color:#8a938c; background:transparent;
+  }
+  .step-dot.active {
+    border-color:#9ad3b6; color:#003825; background:#9ad3b6;
+    box-shadow: 0 0 20px rgba(154,211,182,0.3);
+  }
+  .step-dot.done {
+    border-color:#9ad3b6; color:#9ad3b6; background:rgba(154,211,182,0.1);
+  }
+  .step-line { flex:1; height:2px; background:rgba(138,147,140,0.2); border-radius:1px; position:relative; }
+  .step-line .fill {
+    height:100%; background:linear-gradient(90deg, #9ad3b6, #4cd7f6); border-radius:1px;
+    transition:width 0.5s cubic-bezier(0.4,0,0.2,1); width:0;
+  }
+
+  .input-group { position:relative; margin-bottom:1.25rem; }
+  .input-group label {
+    display:block; font-size:0.7rem; font-weight:700; text-transform:uppercase;
+    letter-spacing:0.08em; color:#8a938c; margin-bottom:6px; padding-left:2px;
+  }
+  .input-wrap {
+    position:relative; display:flex; align-items:center;
+    background:rgba(12,15,16,0.8); border:1.5px solid rgba(138,147,140,0.2);
+    border-radius:14px; transition:all 0.3s ease;
+  }
+  .input-wrap:focus-within {
+    border-color:#9ad3b6;
+    box-shadow: 0 0 0 3px rgba(154,211,182,0.1), 0 0 20px rgba(154,211,182,0.08);
+    background:rgba(12,15,16,1);
+  }
+  .input-wrap .icon {
+    padding:0 14px; color:#404943; transition:color 0.3s; display:flex; align-items:center;
+  }
+  .input-wrap:focus-within .icon { color:#9ad3b6; }
+  .input-wrap input, .input-wrap select {
+    flex:1; background:transparent; border:none; outline:none; padding:14px 14px 14px 0;
+    color:#e1e3e4; font-size:0.9rem; font-family:inherit;
+  }
+  .input-wrap input::placeholder { color:#404943; }
+  .input-wrap select option { background:#191c1d; color:#e1e3e4; }
+
+  .otp-row { display:flex; gap:8px; margin-top:8px; }
+  .otp-row input { flex:1; }
+  .otp-badge {
+    display:none; align-items:center; gap:4px; padding:8px 14px; border-radius:10px;
+    background:rgba(154,211,182,0.08); border:1px solid rgba(154,211,182,0.2);
+    color:#9ad3b6; font-size:0.75rem; font-weight:600;
+    animation: checkPop 0.4s cubic-bezier(0.4,0,0.2,1);
+  }
+  .otp-badge.show { display:inline-flex; }
+
+  .btn-otp {
+    padding:10px 18px; border-radius:12px; font-size:0.75rem; font-weight:700;
+    background:rgba(76,215,246,0.1); border:1px solid rgba(76,215,246,0.25);
+    color:#4cd7f6; cursor:pointer; transition:all 0.3s; white-space:nowrap;
+  }
+  .btn-otp:hover { background:rgba(76,215,246,0.2); transform:translateY(-1px); }
+
+  .btn-verify {
+    padding:10px 18px; border-radius:12px; font-size:0.75rem; font-weight:700;
+    background:linear-gradient(135deg, #9ad3b6, #4cd7f6); color:#003825;
+    border:none; cursor:pointer; transition:all 0.3s; white-space:nowrap;
+  }
+  .btn-verify:hover { transform:translateY(-1px); box-shadow:0 4px 15px rgba(154,211,182,0.3); }
+
+  .btn-primary {
+    width:100%; padding:14px; border-radius:14px; border:none; cursor:pointer;
+    font-size:0.9rem; font-weight:700; font-family:inherit;
+    background:linear-gradient(135deg, #9ad3b6 0%, #4cd7f6 100%);
+    color:#003825; position:relative; overflow:hidden;
+    transition: all 0.3s ease;
+  }
+  .btn-primary:hover { transform:translateY(-2px); box-shadow:0 8px 30px rgba(154,211,182,0.3); }
+  .btn-primary::after {
+    content:''; position:absolute; inset:0;
+    background:linear-gradient(90deg, transparent, rgba(255,255,255,0.2), transparent);
+    background-size:200% 100%; animation:shimmer 2s infinite;
+  }
+  .btn-primary span { position:relative; z-index:1; }
+
+  .btn-google {
+    width:100%; padding:13px; border-radius:14px; border:1.5px solid rgba(255,255,255,0.1);
+    background:rgba(255,255,255,0.04); cursor:pointer; font-size:0.85rem; font-weight:600;
+    font-family:inherit; color:#e1e3e4; display:flex; align-items:center;
+    justify-content:center; gap:10px; transition:all 0.3s;
+  }
+  .btn-google:hover { background:rgba(255,255,255,0.08); border-color:rgba(255,255,255,0.15); transform:translateY(-1px); }
+  .btn-google svg { width:20px; height:20px; }
+
+  .btn-skip {
+    flex:1; padding:12px; border-radius:14px; border:1.5px solid rgba(255,255,255,0.08);
+    background:transparent; cursor:pointer; font-size:0.8rem; font-weight:600;
+    font-family:inherit; color:#8a938c; transition:all 0.3s; text-align:center;
+    text-decoration:none; display:flex; align-items:center; justify-content:center;
+  }
+  .btn-skip:hover { background:rgba(255,255,255,0.04); border-color:rgba(255,255,255,0.12); color:#c0c9c2; }
+
+  .divider { display:flex; align-items:center; gap:12px; margin:1.25rem 0; }
+  .divider::before, .divider::after { content:''; flex:1; height:1px; background:rgba(255,255,255,0.06); }
+  .divider span { font-size:0.7rem; color:#404943; text-transform:uppercase; letter-spacing:0.1em; font-weight:600; }
+
+  .step-section { animation: fadeIn 0.4s ease-out; }
+  .password-strength {
+    display:flex; gap:4px; margin-top:6px;
+  }
+  .password-strength .bar {
+    flex:1; height:3px; border-radius:2px; background:rgba(138,147,140,0.2); transition:all 0.3s;
+  }
+  .password-strength .bar.active { background:#9ad3b6; }
+  .password-strength .bar.medium { background:#fbdd74; }
+  .password-strength .bar.weak { background:#ffb4ab; }
+
+  @media (max-width:768px) {
+    .split-layout { flex-direction:column; }
+    .split-left { min-height:auto; padding:2rem 1.5rem 1rem; }
+    .split-right { padding:1rem 1.5rem 2rem; }
+    .brand-content h2 { font-size:1.4rem; }
+    .brand-content .logo { height:50px; }
+    .form-card .glass-panel { padding:1.5rem; }
+    .pulse-ring-1, .pulse-ring-2 { display:none; }
+  }
+</style>
+</head>
+<body>
+<div class="split-layout">
+  <!-- LEFT: Branding -->
+  <div class="split-left">
+    <div class="floating-shape shape-1"></div>
+    <div class="floating-shape shape-2"></div>
+    <div class="floating-shape shape-3"></div>
+    <div class="floating-shape shape-4"></div>
+    <div class="floating-shape shape-5"></div>
+    <div class="pulse-ring-1"></div>
+    <div class="pulse-ring-2"></div>
+    <div class="brand-content">
+      <img src="/static/logo.png" alt="Synora" class="logo">
+      <h2>Your AI Study Companion</h2>
+      <p style="margin-bottom:1.5rem">Join thousands of students who study smarter, not harder. Synora learns your energy patterns and builds the perfect timetable for you.</p>
+      <div style="display:flex; flex-wrap:wrap; justify-content:center; gap:4px">
+        <span class="feature-pill"><span class="material-symbols-outlined">schedule</span> Energy Scheduling</span>
+        <span class="feature-pill"><span class="material-symbols-outlined">healing</span> Fix My Day</span>
+        <span class="feature-pill"><span class="material-symbols-outlined">psychology</span> AI Learning</span>
+        <span class="feature-pill"><span class="material-symbols-outlined">auto_graph</span> Progress Tracking</span>
+      </div>
     </div>
-    {% if error %}<div class="bg-error-container/20 border border-error/30 text-on-error-container rounded-xl px-4 py-3 text-sm mb-4">{{ error }}</div>{% endif %}
-
-    <!-- OAuth -->
-    <button onclick="googleSignup()" type="button" class="w-full bg-white text-black rounded-xl py-3 font-semibold text-sm flex items-center justify-center gap-2 hover:opacity-90 transition">
-      <svg class="w-5 h-5" viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-      Continue with Google
-    </button>
-    <div class="flex items-center gap-3 my-5"><div class="flex-grow h-px bg-white/10"></div><span class="text-xs text-on-surface-variant">or</span><div class="flex-grow h-px bg-white/10"></div></div>
-
-    <form id="signupForm" action="/signup" method="POST" class="space-y-4">
-      <!-- Step 1: Basic -->
-      <div id="step1" class="space-y-4">
-        <div>
-          <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">Full Name *</label>
-          <div class="relative">
-            <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">person</span>
-            <input name="username" required placeholder="Aarav Sharma" class="w-full input-glass rounded-xl py-3 pl-10 pr-4 text-sm">
-          </div>
-        </div>
-        <div>
-          <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">Email *</label>
-          <div class="flex gap-2">
-            <div class="relative flex-1">
-              <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">mail</span>
-              <input name="email" id="emailInput" type="email" required placeholder="aarav@email.com" class="w-full input-glass rounded-xl py-3 pl-10 pr-4 text-sm">
-            </div>
-            <button type="button" onclick="sendOtp('email')" id="emailOtpBtn" class="px-4 rounded-xl bg-tertiary/20 border border-tertiary/30 text-tertiary text-xs font-bold hover:bg-tertiary/30 transition">Send OTP</button>
-          </div>
-          <div id="emailOtpRow" class="hidden mt-2 flex gap-2">
-            <input id="emailOtp" placeholder="Enter OTP" maxlength="6" class="flex-1 input-glass rounded-xl py-2 px-3 text-sm">
-            <button type="button" onclick="verifyOtp('email')" class="px-4 rounded-xl bg-primary text-on-primary text-xs font-bold">Verify</button>
-            <span id="emailVerifyBadge" class="hidden text-primary text-xs flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">verified</span> Verified</span>
-          </div>
-        </div>
-        <div>
-          <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">Phone (optional) — OTP verification</label>
-          <div class="flex gap-2">
-            <div class="relative flex-1">
-              <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[18px]">call</span>
-              <input name="phone" id="phoneInput" placeholder="+91 98765 43210" class="w-full input-glass rounded-xl py-3 pl-10 pr-4 text-sm">
-            </div>
-            <button type="button" onclick="sendOtp('phone')" id="phoneOtpBtn" class="px-4 rounded-xl bg-tertiary/20 border border-tertiary/30 text-tertiary text-xs font-bold hover:bg-tertiary/30 transition">Send OTP</button>
-          </div>
-          <div id="phoneOtpRow" class="hidden mt-2 flex gap-2">
-            <input id="phoneOtp" placeholder="OTP" maxlength="6" class="flex-1 input-glass rounded-xl py-2 px-3 text-sm">
-            <button type="button" onclick="verifyOtp('phone')" class="px-4 rounded-xl bg-primary text-on-primary text-xs font-bold">Verify</button>
-            <span id="phoneVerifyBadge" class="hidden text-primary text-xs flex items-center gap-1"><span class="material-symbols-outlined text-[16px]">verified</span> Verified</span>
-          </div>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">Password *</label>
-            <input name="password" type="password" required placeholder="Min 6 chars" class="w-full input-glass rounded-xl py-3 px-4 text-sm">
-          </div>
-          <div>
-            <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">Confirm *</label>
-            <input name="confirm" type="password" required placeholder="••••" class="w-full input-glass rounded-xl py-3 px-4 text-sm">
-          </div>
-        </div>
-        <button type="button" onclick="goStep(2)" class="w-full synora-gradient text-on-primary rounded-xl py-3 text-sm font-bold hover:opacity-90 transition flex items-center justify-center gap-2">Next: Your Study Profile <span class="material-symbols-outlined text-[18px]">arrow_forward</span></button>
-      </div>
-
-      <!-- Step 2: Onboarding -->
-      <div id="step2" class="hidden space-y-4">
-        <div class="flex items-center justify-between">
-          <h3 class="font-bold">Your Study Profile</h3>
-          <button type="button" onclick="goStep(1)" class="text-xs text-on-surface-variant hover:text-primary">← Back</button>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">Age</label>
-            <input name="age" type="number" min="10" max="80" placeholder="18" class="w-full input-glass rounded-xl py-3 px-4 text-sm">
-          </div>
-          <div>
-            <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">School / College</label>
-            <input name="school" placeholder="IIT Coaching / DU" class="w-full input-glass rounded-xl py-3 px-4 text-sm">
-          </div>
-        </div>
-        <div>
-          <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">Target Exam *</label>
-          <select name="exam_goal" class="w-full input-glass rounded-xl py-3 px-4 text-sm">
-            <option value="">Select</option>
-            <option>JEE</option><option>NEET</option><option>GATE</option><option>UPSC</option><option>SSC CGL</option><option>Banking</option><option>CBSE 12</option><option>CUET</option><option>Other</option>
-          </select>
-        </div>
-        <div class="grid grid-cols-2 gap-3">
-          <div>
-            <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">Level</label>
-            <select name="study_level" class="w-full input-glass rounded-xl py-3 px-4 text-sm">
-              <option value="">Select</option><option>Class 11</option><option>Class 12</option><option>Dropper</option><option>College</option><option>Working</option>
-            </select>
-          </div>
-          <div>
-            <label class="text-xs font-bold uppercase tracking-wider text-on-surface-variant mb-1 block">Daily Hours</label>
-            <select name="daily_hours" class="w-full input-glass rounded-xl py-3 px-4 text-sm">
-              <option value="3">3 hrs</option><option value="4">4 hrs</option><option value="6">6 hrs</option><option value="8">8 hrs</option><option value="10">10 hrs</option>
-            </select>
-          </div>
-        </div>
-        <label class="flex items-center gap-2 text-xs"><input type="checkbox" required class="rounded"> I agree to <a href="#" class="text-primary underline">Terms</a> & <a href="#" class="text-primary underline">Privacy</a></label>
-        <div class="flex gap-3">
-          <a href="/dashboard" class="flex-1 py-3 rounded-xl bg-white/5 border border-white/10 text-center text-sm font-semibold hover:bg-white/10 transition">Skip for now</a>
-          <button type="submit" class="flex-1 synora-gradient text-on-primary rounded-xl py-3 text-sm font-bold hover:opacity-90 transition">Create Account</button>
-        </div>
-      </div>
-    </form>
-    <p class="text-center text-sm text-on-surface-variant mt-6">Already have an account? <a href="/login" class="text-primary font-bold hover:underline">Log in</a></p>
   </div>
-</main>
+
+  <!-- RIGHT: Form -->
+  <div class="split-right">
+    <div class="form-card">
+      <div class="glass-panel">
+        <div class="text-center" style="margin-bottom:1.5rem">
+          <h1 style="font-size:1.5rem; font-weight:800; letter-spacing:-0.02em">Create Account</h1>
+          <p style="color:#8a938c; font-size:0.85rem; margin-top:4px">Start your personalized study journey</p>
+        </div>
+
+        {% if error %}
+        <div style="background:rgba(255,180,171,0.08); border:1px solid rgba(255,180,171,0.2); border-radius:12px; padding:10px 14px; font-size:0.8rem; color:#ffb4ab; margin-bottom:1rem; display:flex; align-items:center; gap:8px">
+          <span class="material-symbols-outlined" style="font-size:18px">error</span> {{ error }}
+        </div>
+        {% endif %}
+
+        <!-- Step Indicator -->
+        <div class="step-indicator">
+          <div class="step-dot active" id="dot1">1</div>
+          <div class="step-line"><div class="fill" id="lineFill"></div></div>
+          <div class="step-dot" id="dot2">2</div>
+        </div>
+
+        <form id="signupForm" action="/signup" method="POST">
+          <!-- Step 1 -->
+          <div id="step1" class="step-section">
+            <div class="input-group">
+              <label>Full Name</label>
+              <div class="input-wrap">
+                <span class="icon"><span class="material-symbols-outlined">person</span></span>
+                <input name="username" required placeholder="Aarav Sharma" autocomplete="name">
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label>Email Address</label>
+              <div class="input-wrap">
+                <span class="icon"><span class="material-symbols-outlined">mail</span></span>
+                <input name="email" id="emailInput" type="email" required placeholder="aarav@email.com" autocomplete="email">
+              </div>
+              <div class="otp-row">
+                <button type="button" onclick="sendOtp('email')" id="emailOtpBtn" class="btn-otp">Send OTP</button>
+                <input id="emailOtp" placeholder="Enter 6-digit OTP" maxlength="6" class="input-glass" style="border-radius:12px; padding:10px 14px; font-size:0.85rem; display:none; flex:1; background:rgba(12,15,16,0.8); border:1.5px solid rgba(138,147,140,0.2); color:#e1e3e4">
+                <button type="button" onclick="verifyOtp('email')" id="emailVerifyBtn" class="btn-verify" style="display:none">Verify</button>
+                <span id="emailBadge" class="otp-badge"><span class="material-symbols-outlined" style="font-size:16px">verified</span> Verified</span>
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label>Phone <span style="color:#404943; text-transform:none; letter-spacing:0">(optional)</span></label>
+              <div class="input-wrap">
+                <span class="icon"><span class="material-symbols-outlined">call</span></span>
+                <input name="phone" id="phoneInput" placeholder="+91 98765 43210" autocomplete="tel">
+              </div>
+              <div class="otp-row">
+                <button type="button" onclick="sendOtp('phone')" id="phoneOtpBtn" class="btn-otp">Send OTP</button>
+                <input id="phoneOtp" placeholder="OTP" maxlength="6" class="input-glass" style="border-radius:12px; padding:10px 14px; font-size:0.85rem; display:none; flex:1; background:rgba(12,15,16,0.8); border:1.5px solid rgba(138,147,140,0.2); color:#e1e3e4">
+                <button type="button" onclick="verifyOtp('phone')" id="phoneVerifyBtn" class="btn-verify" style="display:none">Verify</button>
+                <span id="phoneBadge" class="otp-badge"><span class="material-symbols-outlined" style="font-size:16px">verified</span> Verified</span>
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+              <div class="input-group" style="margin-bottom:0">
+                <label>Password</label>
+                <div class="input-wrap">
+                  <span class="icon"><span class="material-symbols-outlined">lock</span></span>
+                  <input name="password" id="passwordInput" type="password" required placeholder="Min 6 chars" autocomplete="new-password">
+                </div>
+                <div class="password-strength" id="pwdStrength">
+                  <div class="bar"></div><div class="bar"></div><div class="bar"></div><div class="bar"></div>
+                </div>
+              </div>
+              <div class="input-group" style="margin-bottom:0">
+                <label>Confirm</label>
+                <div class="input-wrap">
+                  <span class="icon"><span class="material-symbols-outlined">lock_reset</span></span>
+                  <input name="confirm" type="password" required placeholder="Repeat password" autocomplete="new-password">
+                </div>
+              </div>
+            </div>
+
+            <button type="button" onclick="goStep(2)" class="btn-primary" style="margin-top:1.25rem">
+              <span style="display:flex; align-items:center; justify-content:center; gap:8px">
+                Continue to Profile <span class="material-symbols-outlined" style="font-size:18px">arrow_forward</span>
+              </span>
+            </button>
+          </div>
+
+          <!-- Step 2 -->
+          <div id="step2" class="step-section" style="display:none">
+            <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:1rem">
+              <h3 style="font-weight:700; font-size:1rem">Study Profile</h3>
+              <button type="button" onclick="goStep(1)" style="background:none; border:none; color:#8a938c; cursor:pointer; font-size:0.8rem; font-family:inherit; display:flex; align-items:center; gap:4px">
+                <span class="material-symbols-outlined" style="font-size:16px">arrow_back</span> Back
+              </button>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+              <div class="input-group" style="margin-bottom:0">
+                <label>Age</label>
+                <div class="input-wrap">
+                  <span class="icon"><span class="material-symbols-outlined">cake</span></span>
+                  <input name="age" type="number" min="10" max="80" placeholder="17">
+                </div>
+              </div>
+              <div class="input-group" style="margin-bottom:0">
+                <label>School / College</label>
+                <div class="input-wrap">
+                  <span class="icon"><span class="material-symbols-outlined">school</span></span>
+                  <input name="school" placeholder="FIITJEE / DU">
+                </div>
+              </div>
+            </div>
+
+            <div class="input-group">
+              <label>Target Exam</label>
+              <div class="input-wrap">
+                <span class="icon"><span class="material-symbols-outlined">emoji_events</span></span>
+                <select name="exam_goal">
+                  <option value="">Select your goal</option>
+                  <option>JEE Main + Advanced</option><option>NEET</option><option>GATE</option>
+                  <option>UPSC CSE</option><option>SSC CGL</option><option>Banking (IBPS)</option>
+                  <option>CBSE Class 12</option><option>CUET</option><option>State Board</option><option>Other</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
+              <div class="input-group" style="margin-bottom:0">
+                <label>Study Level</label>
+                <div class="input-wrap">
+                  <span class="icon"><span class="material-symbols-outlined">trending_up</span></span>
+                  <select name="study_level">
+                    <option value="">Select</option><option>Class 11</option><option>Class 12</option>
+                    <option>Dropper / Gap Year</option><option>College Fresher</option><option>Working Professional</option>
+                  </select>
+                </div>
+              </div>
+              <div class="input-group" style="margin-bottom:0">
+                <label>Daily Hours</label>
+                <div class="input-wrap">
+                  <span class="icon"><span class="material-symbols-outlined">timer</span></span>
+                  <select name="daily_hours">
+                    <option value="3">3 hours</option><option value="4">4 hours</option>
+                    <option value="6" selected>6 hours</option><option value="8">8 hours</option><option value="10">10+ hours</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+
+            <label style="display:flex; align-items:flex-start; gap:8px; margin:1rem 0; cursor:pointer; font-size:0.78rem; color:#8a938c">
+              <input type="checkbox" required style="margin-top:2px; accent-color:#9ad3b6">
+              I agree to <a href="#" style="color:#9ad3b6; text-decoration:underline">Terms</a> & <a href="#" style="color:#9ad3b6; text-decoration:underline">Privacy Policy</a>
+            </label>
+
+            <div style="display:flex; gap:10px">
+              <a href="/dashboard" class="btn-skip">Skip for now</a>
+              <button type="submit" class="btn-primary" style="flex:2">
+                <span style="display:flex; align-items:center; justify-content:center; gap:8px">
+                  Create Account <span class="material-symbols-outlined" style="font-size:18px">rocket_launch</span>
+                </span>
+              </button>
+            </div>
+          </div>
+        </form>
+
+        <div class="divider"><span>or</span></div>
+
+        <button onclick="googleSignup()" type="button" class="btn-google">
+          <svg viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
+          Continue with Google
+        </button>
+
+        <p style="text-align:center; margin-top:1.25rem; font-size:0.82rem; color:#8a938c">
+          Already have an account? <a href="/login" style="color:#9ad3b6; font-weight:700; text-decoration:none">Log in</a>
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
-function goStep(n){ document.getElementById('step1').classList.toggle('hidden', n!==1); document.getElementById('step2').classList.toggle('hidden', n!==2); window.scrollTo({top:0, behavior:'smooth'}); }
+function goStep(n){
+  document.getElementById('step1').style.display = n===1 ? 'block' : 'none';
+  document.getElementById('step2').style.display = n===2 ? 'block' : 'none';
+  document.getElementById('dot1').className = 'step-dot ' + (n===1 ? 'active' : 'done');
+  document.getElementById('dot2').className = 'step-dot ' + (n===2 ? 'active' : '');
+  document.getElementById('lineFill').style.width = n===2 ? '100%' : '0%';
+  if(n===2) document.getElementById('dot1').innerHTML = '<span class="material-symbols-outlined" style="font-size:18px">check</span>';
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
 async function sendOtp(kind){
-  const val = (kind==='email' ? document.getElementById('emailInput').value : document.getElementById('phoneInput').value).trim();
-  if(!val) { alert('Enter '+kind+' first'); return; }
+  const val = (kind==='email' ? document.getElementById('emailInput') : document.getElementById('phoneInput')).value.trim();
+  if(!val) return;
+  const btn = document.getElementById(kind+'OtpBtn');
+  btn.textContent = 'Sending...'; btn.disabled = true;
   const r = await fetch('/auth/send-otp', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({kind, target: val})});
   const d = await r.json();
-  if(d.ok){ alert('OTP sent to '+val+' (demo: '+d.otp+')'); document.getElementById(kind+'OtpRow').classList.remove('hidden'); } else alert(d.error||'Failed');
+  if(d.ok){
+    btn.textContent = 'Resend'; btn.disabled = false;
+    document.getElementById(kind+'Otp').style.display = 'flex';
+    document.getElementById(kind+'VerifyBtn').style.display = 'block';
+    alert('OTP sent! (demo: '+d.otp+')');
+  } else { btn.textContent = 'Retry'; btn.disabled = false; alert(d.error||'Failed'); }
 }
+
 async function verifyOtp(kind){
   const otp = document.getElementById(kind+'Otp').value.trim();
-  const target = (kind==='email' ? document.getElementById('emailInput').value : document.getElementById('phoneInput').value).trim();
+  const target = (kind==='email' ? document.getElementById('emailInput') : document.getElementById('phoneInput')).value.trim();
   const r = await fetch('/auth/verify-otp', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({kind, target, otp})});
   const d = await r.json();
-  if(d.ok){ document.getElementById(kind+'VerifyBadge').classList.remove('hidden'); document.getElementById(kind+'OtpRow').classList.add('hidden'); } else alert(d.error||'Wrong OTP');
+  if(d.ok){
+    document.getElementById(kind+'Badge').classList.add('show');
+    document.getElementById(kind+'Otp').style.display='none';
+    document.getElementById(kind+'VerifyBtn').style.display='none';
+    document.getElementById(kind+'OtpBtn').style.display='none';
+  } else alert(d.error||'Wrong OTP');
 }
+
+document.getElementById('passwordInput').addEventListener('input', function(){
+  const v = this.value; let s = 0;
+  if(v.length >= 6) s++; if(v.length >= 10) s++;
+  if(/[A-Z]/.test(v) && /[0-9]/.test(v)) s++; if(/[^A-Za-z0-9]/.test(v)) s++;
+  const bars = document.querySelectorAll('#pwdStrength .bar');
+  bars.forEach((b,i) => { b.className = 'bar' + (i < s ? (s<=1?' active weak':s<=2?' active medium':' active') : ''); });
+});
+
 async function googleSignup(){
-  // Mock Google flow — in production use Firebase/Google Identity
   const email = prompt('Demo Google — enter your Gmail:');
   if(!email) return;
   const r = await fetch('/auth/google', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email})});
