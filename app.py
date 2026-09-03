@@ -616,6 +616,14 @@ def _seed_guest_history(user):
 
 @app.before_request
 def ensure_guest_session():
+    # Skip guest auto-login for public/auth routes
+    public_paths = ("/login", "/signup", "/logout", "/auth/", "/static/", "/favicon", "/features", "/methodology")
+    if any(request.path.startswith(p) for p in public_paths) or request.path == "/":
+        return
+    # If user is already logged in (not guest), skip
+    if session.get("email") and session["email"] != GUEST_EMAIL:
+        return
+    # Auto-create guest user if needed
     guest = User.query.filter_by(email=GUEST_EMAIL).first()
     if not guest:
         guest = create_user("Student", GUEST_EMAIL, "")
@@ -654,17 +662,22 @@ def _commit_after(response):
 def login_required(view):
     @wraps(view)
     def wrapper(*args, **kwargs):
+        if not session.get("email"):
+            if request.path.startswith("/api/"):
+                return jsonify({"error": "Login required"}), 401
+            return redirect(url_for("login_page"))
         return view(*args, **kwargs)
-
     return wrapper
 
 
 # ---------------------------------------------------------------------------
-# Root Route — straight to dashboard
+# Root Route — landing page or dashboard if logged in
 # ---------------------------------------------------------------------------
 @app.route("/")
 def landing():
-    return redirect(url_for("dashboard"))
+    if session.get("email") and session["email"] != GUEST_EMAIL:
+        return redirect(url_for("dashboard"))
+    return redirect(url_for("login_page"))
 
 
 @app.route("/features")
