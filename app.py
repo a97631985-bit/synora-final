@@ -36,6 +36,95 @@ app.config["SESSION_COOKIE_SECURE"] = _is_prod
 app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(days=7)
 app.config["MAX_CONTENT_LENGTH"] = 16 * 1024 * 1024
 
+# ---------------------------------------------------------------------------
+# Lightweight in-memory rate limiter (IP-based + action-based) to protect
+# auth endpoints against brute-force / abuse. Uses a fixed-window counter.
+# NOTE: resets on process restart (per-worker). Good enough for abuse defense;
+# a Redis-backed limiter can be swapped in for high-scale production.
+# ---------------------------------------------------------------------------
+import threading
+_ratelimit_lock = threading.Lock()
+_ratelimit_buckets = {}  # key -> {"count": int, "window_start": epoch_seconds, "period": seconds, "limit": int}
+
+
+def _rate_key(*parts):
+    # Use IP + route identity; fall back consistently so proxies that strip
+    # REMOTE_ADDR don't all share one bucket.
+    ip = request.remote_addr or "unknown"
+    return "|".join([ip] + [str(p) for p in parts])
+
+
+def _rate_allowed(key, limit, period):
+    """Return (allowed: bool, retry_after_seconds). Fixed-window counter."""
+    import time as _t
+    now = _t.time()
+    with _ratelimit_lock:
+        bucket = _ratelimit_buckets.get(key)
+        if bucket is None or now - bucket["window_start"] >= bucket["period"]:
+            _ratelimit_buckets[key] = {"count": 1, "window_start": now, "period": period, "limit": limit}
+            return True, 0
+        if bucket["count"] < bucket["limit"]:
+            bucket["count"] += 1
+            return True, 0
+        retry_in = int(bucket["period"] - (now - bucket["window_start"])) + 1
+        return False, retry_in
+
+
+def rate_limit(limit, period, key_parts=None):
+    """Decorator: deny with 429 when the IP/action bucket exceeds `limit`/`period` (seconds)."""
+    def decorator(view):
+        @wraps(view)
+        def wrapped(*args, **kwargs):
+            key = _rate_key(*(key_parts() if callable(key_parts) else (key_parts or [])))
+            allowed, retry_in = _rate_allowed(key, limit, period)
+            if not allowed:
+                if request.path.startswith("/api/") or request.is_json:
+                    return jsonify({"error": "Too many attempts. Please wait and try again.",
+                                    "retry_after": retry_in}), 429
+                return render_template("error.html", code=429, title="Too Many Requests",
+                                       message=f"Please slow down and try again in about {retry_in} seconds."), 429
+            return view(*args, **kwargs)
+        return wrapped
+    return decorator
+
+
+# ---------------------------------------------------------------------------
+# Input validation helpers (production-grade checks for auth fields)
+# ---------------------------------------------------------------------------
+import re as _re
+
+_EMAIL_RE = _re.compile(r"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$")
+_PHONE_RE = _re.compile(r"^\+?[0-9]{7,15}$")
+_USERNAME_RE = _re.compile(r"^[\w\s.\-]{2,50}$")
+_PASSWORD_MIN = 6
+
+
+def _valid_email(email):
+    return bool(email) and len(email) <= 254 and bool(_EMAIL_RE.match(email))
+
+
+def _valid_phone(phone):
+    if not phone:
+        return True  # phone is optional
+    return bool(_PHONE_RE.match(phone))
+
+
+def _valid_username(username):
+    return bool(username) and bool(_USERNAME_RE.match(username))
+
+
+def _password_ok(password):
+    """Return (ok, reason). Enforce a minimum of 6 chars (no weird control chars)."""
+    if isinstance(password, str) and len(password) >= _PASSWORD_MIN and len(password) <= 128:
+        if any(c for c in password if ord(c) < 32):  # reject control characters
+            return False, "Password contains invalid characters"
+        return True, ""
+    return False, f"Password must be at least {_PASSWORD_MIN} characters"
+
+
+def _sanitize_email(email):
+    return (email or "").strip().lower()
+
 # --- Database Config: Postgres on Render, SQLite locally ---
 db_url = os.environ.get("DATABASE_URL", "")
 if db_url and db_url.startswith("postgres://"):
@@ -673,6 +762,26 @@ def ensure_guest_session():
 
 @app.after_request
 def _commit_after(response):
+    # -- Security headers (defense-in-depth) --
+    # Default-deny framing & MIME sniffing.
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    response.headers.setdefault("X-XSS-Protection", "0")  # modern XSS handling, avoid legacy filter
+    response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+    # A pragmatic CSP: allow our own styles/scripts and Google Identity (GIS) for OAuth.
+    # 'unsafe-inline' is required by Tailwind's injected <style> and some inline scripts.
+    if not response.headers.get("Content-Security-Policy"):
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com; "
+            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; "
+            "font-src 'self' https://fonts.gstatic.com data:; "
+            "img-src 'self' data: https:; "
+            "frame-src https://accounts.google.com https://content.googleapis.com; "
+            "connect-src 'self' https://accounts.google.com https://fonts.googleapis.com https://fonts.gstatic.com; "
+            "base-uri 'self'; form-action 'self'"
+        )
     try:
         # Ensure JSON mutations (including nested dict edits) are persisted
         # Touch all JSON columns for the current user to force dirty check
@@ -695,6 +804,17 @@ def _commit_after(response):
     except Exception:
         db.session.rollback()
     return response
+
+
+# Rate limits applied to auth endpoints (configurable via env for tuning).
+AUTH_RATE = {
+    "per_ip": int(os.environ.get("RATE_IP", "30")),      # requests / window per IP
+    "login": int(os.environ.get("RATE_LOGIN", "8")),     # login attempts / 60s
+    "otp": int(os.environ.get("RATE_OTP", "5")),         # OTP sends or verifies / 60s
+    "signup": int(os.environ.get("RATE_SIGNUP", "6")),   # signups / 60s
+    "reset": int(os.environ.get("RATE_RESET", "5")),     # password reset requests / 60s
+}
+AUTH_WINDOW = 60  # seconds
 
 
 def login_required(view):
@@ -2603,9 +2723,10 @@ def signup_page():
     return render_template("signup_new.html")
 
 @app.route("/signup", methods=["POST"])
+@rate_limit(AUTH_RATE["signup"], AUTH_WINDOW)
 def signup_post():
     username = (request.form.get("username") or "").strip()
-    email = (request.form.get("email") or "").strip().lower()
+    email = _sanitize_email(request.form.get("email"))
     phone = (request.form.get("phone") or "").strip()
     password = request.form.get("password") or ""
     confirm = request.form.get("confirm") or ""
@@ -2614,12 +2735,18 @@ def signup_post():
     daily_hours = request.form.get("daily_hours")
     school = request.form.get("school") or None
     age = request.form.get("age")
-    if not username or not email or not password:
-        return render_template("signup_new.html", error="Name, email and password required")
+    # --- Validation ---
+    if not _valid_username(username):
+        return render_template("signup_new.html", error="Name should be 2–50 letters/numbers (no symbols)")
+    if not _valid_email(email):
+        return render_template("signup_new.html", error="Please enter a valid email address")
+    if not _valid_phone(phone):
+        return render_template("signup_new.html", error="Please enter a valid phone number")
+    ok, reason = _password_ok(password)
+    if not ok:
+        return render_template("signup_new.html", error=reason)
     if password != confirm:
         return render_template("signup_new.html", error="Passwords do not match")
-    if len(password) < 6:
-        return render_template("signup_new.html", error="Password must be at least 6 chars")
     if User.query.filter_by(email=email).first():
         return render_template("signup_new.html", error="Email already registered — try login")
     try:
@@ -2651,14 +2778,19 @@ def login_page():
     return render_template("login_new.html")
 
 @app.route("/login", methods=["POST"])
+@rate_limit(AUTH_RATE["login"], AUTH_WINDOW)
 def login_post():
-    email = (request.form.get("email") or "").strip().lower()
+    raw = (request.form.get("email") or "").strip()
     password = request.form.get("password") or ""
+    if not raw or not password:
+        return render_template("login_new.html", error="Please enter your email/phone and password")
+    if password and not any(ord(c) >= 32 for c in password):
+        return render_template("login_new.html", error="Invalid email/phone or password")
+    email = raw.lower()
     # Allow phone login via email field
     user = User.query.filter_by(email=email).first()
     if not user:
-        # try phone
-        user = User.query.filter_by(phone=email).first()
+        user = User.query.filter_by(phone=raw).first()
     if not user or not _check_password(user.password, password):
         return render_template("login_new.html", error="Invalid email/phone or password")
     session["email"] = user.email
@@ -2671,12 +2803,17 @@ def logout():
     return redirect(url_for("login_page"))
 
 @app.route("/auth/send-otp", methods=["POST"])
+@rate_limit(AUTH_RATE["otp"], AUTH_WINDOW, key_parts=lambda: ["otp-send"])
 def auth_send_otp():
     data = request.get_json(silent=True) or {}
     kind = data.get("kind")  # email/phone
-    target = (data.get("target") or "").strip()
-    if not target:
-        return jsonify({"error": "Target required"}), 400
+    target = (data.get("target") or "").strip().lower()
+    if kind == "email" and not _valid_email(target):
+        return jsonify({"error": "Valid email required"}), 400
+    if kind == "phone" and not _valid_phone(target):
+        return jsonify({"error": "Valid phone required"}), 400
+    if kind not in ("email", "phone") or not target:
+        return jsonify({"error": "Invalid request"}), 400
     otp = f"{random.randint(100000, 999999)}"
     otp_store[target] = {"otp": otp, "kind": kind, "expires": datetime.now() + timedelta(minutes=5)}
     # Try to send a real email OTP
@@ -2696,12 +2833,17 @@ def auth_send_otp():
     return jsonify(resp)
 
 @app.route("/auth/verify-otp", methods=["POST"])
+@rate_limit(AUTH_RATE["otp"], AUTH_WINDOW, key_parts=lambda: ["otp-verify"])
 def auth_verify_otp():
     data = request.get_json(silent=True) or {}
     kind = data.get("kind")
-    target = (data.get("target") or "").strip()
+    target = (data.get("target") or "").strip().lower()
     otp = (data.get("otp") or "").strip()
     login = data.get("login") is True
+    if kind not in ("email", "phone") or not target:
+        return jsonify({"error": "Invalid request"}), 400
+    if not otp or not otp.isdigit() or len(otp) != 6:
+        return jsonify({"error": "Invalid OTP format"}), 400
     rec = otp_store.get(target)
     if not rec or rec["otp"] != otp:
         return jsonify({"error": "Invalid OTP"}), 400
@@ -2731,15 +2873,20 @@ def auth_verify_otp():
     return jsonify({"ok": True, "message": "Verified"})
 
 @app.route("/auth/google", methods=["POST"])
+@rate_limit(AUTH_RATE["login"], AUTH_WINDOW, key_parts=lambda: ["google"])
 def auth_google():
     data = request.get_json(silent=True) or {}
     email = (data.get("email") or "").strip().lower()
     name = (data.get("name") or "").strip()
     picture = (data.get("picture") or "").strip()
-    if not email or "@" not in email:
+    if not _valid_email(email):
         return jsonify({"error": "Valid email required"}), 400
+    if name and (len(name) > 50 or not _valid_username(name)):
+        name = ""  # sanitize: drop invalid names rather than reject
     # Demo mode: allow a demo flag to skip strict verification.
     # In production, verify the Google ID token server-side.
+    if picture and not picture.startswith("https://"):
+        picture = ""  # avoid exfil/injection via arbitrary scheme
     user = User.query.filter_by(email=email).first()
     if not user:
         username = name or email.split("@")[0]
@@ -2858,10 +3005,11 @@ def forgot_password():
 
 
 @app.route("/forgot-password", methods=["POST"])
+@rate_limit(AUTH_RATE["reset"], AUTH_WINDOW, key_parts=lambda: ["forgot"])
 def forgot_password_post():
-    email = (request.form.get("email") or "").strip().lower()
-    if not email:
-        return render_template("forgot_password.html", error="Please enter your email")
+    email = _sanitize_email(request.form.get("email"))
+    if not _valid_email(email):
+        return render_template("forgot_password.html", error="Please enter a valid email")
     user = User.query.filter_by(email=email).first()
     # Always show a generic message to avoid revealing whether an email exists
     # (prevents account enumeration).
@@ -2914,6 +3062,7 @@ def change_password_page():
 
 @app.route("/password", methods=["POST"])
 @login_required
+@rate_limit(AUTH_RATE["login"], AUTH_WINDOW, key_parts=lambda: ["chpwd"])
 def change_password_post():
     user = current_user()
     current_pwd = request.form.get("current_password") or ""
@@ -2922,8 +3071,9 @@ def change_password_post():
     # Only enforce current password if the user actually has one set
     if user.password and not _check_password(user.password, current_pwd):
         return render_template("change_password.html", error="Current password is incorrect")
-    if len(new_pwd) < 6:
-        return render_template("change_password.html", error="New password must be at least 6 characters")
+    ok, reason = _password_ok(new_pwd)
+    if not ok:
+        return render_template("change_password.html", error=reason)
     if new_pwd != confirm:
         return render_template("change_password.html", error="New passwords do not match")
     user.password = _hash_password(new_pwd)
@@ -2943,6 +3093,7 @@ def reset_password(token):
     return render_template("reset_password.html", token=token)
 
 @app.route("/reset-password/<token>", methods=["POST"])
+@rate_limit(AUTH_RATE["login"], AUTH_WINDOW, key_parts=lambda: ["reset"])
 def reset_password_post(token):
     user = User.query.filter_by(password_reset_token=token).first()
     if not user:
@@ -2953,8 +3104,9 @@ def reset_password_post(token):
                                message="This password reset link has expired."), 400
     password = request.form.get("password") or ""
     confirm = request.form.get("confirm") or ""
-    if len(password) < 6:
-        return render_template("reset_password.html", token=token, error="Password must be at least 6 characters")
+    ok, reason = _password_ok(password)
+    if not ok:
+        return render_template("reset_password.html", token=token, error=reason)
     if password != confirm:
         return render_template("reset_password.html", token=token, error="Passwords do not match")
     user.password = _hash_password(password)

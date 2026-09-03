@@ -30,3 +30,14 @@ services:
         value: synora-admin-2026
       - key: PYTHON_VERSION
         value: "3.11"
+      # Optional: tune auth rate limiting (requests per 60s window per IP)
+      - key: RATE_IP
+        value: "30"
+      - key: RATE_LOGIN
+        value: "8"
+      - key: RATE_OTP
+        value: "5"
+      - key: RATE_SIGNUP
+        value: "6"
+      - key: RATE_RESET
+        value: "5"
