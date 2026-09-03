@@ -2,3 +2,5 @@ flask
 google-generativeai
 PyPDF2
 gunicorn
+Flask-SQLAlchemy
+psycopg2-binary

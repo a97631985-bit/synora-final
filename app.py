@@ -18,9 +18,23 @@ except ImportError:
     PYPDF2_AVAILABLE = False
 
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy.ext.mutable import MutableList, MutableDict
 
 app = Flask(__name__)
-app.secret_key = "synora-hackathon-demo-secret-key-2026"
+app.secret_key = os.environ.get("SYNORA_SECRET", "synora-hackathon-demo-secret-key-2026")
+
+# --- Database Config: Postgres on Render, SQLite locally ---
+db_url = os.environ.get("DATABASE_URL", "")
+if db_url and db_url.startswith("postgres://"):
+    db_url = db_url.replace("postgres://", "postgresql://", 1)
+if not db_url:
+    # local SQLite file in instance folder
+    os.makedirs(app.instance_path, exist_ok=True)
+    db_url = "sqlite:///" + os.path.join(app.instance_path, "synora.db")
+app.config["SQLALCHEMY_DATABASE_URI"] = db_url
+app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+db = SQLAlchemy(app)
 
 # Gemini Configuration
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
@@ -50,35 +64,191 @@ def _gemini_generate(prompt, attempts=3):
     raise last_err
 
 # ---------------------------------------------------------------------------
-# Mock Database (in-memory, hackathon demo)
+# Database Models — persistent storage for every user
 # ---------------------------------------------------------------------------
-users_db = {}
+class User(db.Model):
+    __tablename__ = "users"
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(200), unique=True, nullable=False, index=True)
+    username = db.Column(db.String(120), nullable=False)
+    password = db.Column(db.String(300), default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    current_energy = db.Column(db.String(20), default="Active")
+    last_taunt = db.Column(db.Text, nullable=True)
+    _history_seeded = db.Column(db.Boolean, default=False)
+    # JSON blobs for flexible learning data — also stores tasks/focus/plans for legacy compat
+    learning_data = db.Column(MutableDict.as_mutable(db.JSON), default=lambda: {
+        "energy_reports": [], "completion_patterns": [], "focus_sessions_detailed": [],
+        "sleep_wake": [], "routine_version": 0, "last_analyzed": None, "personal_routine": None, "energy_model": None
+    })
+    quiz_session = db.Column(MutableDict.as_mutable(db.JSON), nullable=True)
+    quiz_history = db.Column(MutableList.as_mutable(db.JSON), default=list)
+    # Persistent JSON stores (replaces in-memory lists) - mutable for auto-tracking
+    tasks_data = db.Column(MutableList.as_mutable(db.JSON), default=list)
+    focus_data = db.Column(MutableList.as_mutable(db.JSON), default=list)
+    syllabus_data = db.Column(MutableList.as_mutable(db.JSON), default=list)
+
+    # Relationships
+    tasks = db.relationship("Task", backref="user", lazy=True, cascade="all, delete-orphan")
+    focus_sessions = db.relationship("FocusSession", backref="user", lazy=True, cascade="all, delete-orphan")
+    syllabus_plans = db.relationship("SyllabusPlan", backref="user", lazy=True, cascade="all, delete-orphan")
+
+    # --- Dict-like compatibility for legacy code (JSON-backed) ---
+    def __getitem__(self, key):
+        if key == "tasks":
+            return self.tasks_data if self.tasks_data is not None else []
+        if key == "focus_sessions":
+            return self.focus_data if self.focus_data is not None else []
+        if key == "syllabus_plans":
+            return self.syllabus_data if self.syllabus_data is not None else []
+        if hasattr(self, key):
+            return getattr(self, key)
+        if key == "_history_seeded":
+            return self._history_seeded
+        if key == "learning_data":
+            return self.learning_data
+        raise KeyError(key)
+
+    def __setitem__(self, key, val):
+        if key == "tasks":
+            self.tasks_data = val
+            from sqlalchemy.orm.attributes import flag_modified; flag_modified(self, "tasks_data")
+        elif key == "focus_sessions":
+            self.focus_data = val
+            from sqlalchemy.orm.attributes import flag_modified; flag_modified(self, "focus_data")
+        elif key == "syllabus_plans":
+            self.syllabus_data = val
+            from sqlalchemy.orm.attributes import flag_modified; flag_modified(self, "syllabus_data")
+        elif key == "_history_seeded":
+            self._history_seeded = val
+        elif key == "learning_data":
+            self.learning_data = val
+            from sqlalchemy.orm.attributes import flag_modified; flag_modified(self, "learning_data")
+        elif hasattr(self, key):
+            setattr(self, key, val)
+        else:
+            setattr(self, key, val)
+
+    def get(self, key, default=None):
+        try:
+            return self.__getitem__(key)
+        except KeyError:
+            return default
+
+    def setdefault(self, key, default):
+        val = self.get(key, None)
+        # treat empty list as existing? legacy setdefault checks None, but we mimic: if key missing or None
+        if key in ("tasks", "focus_sessions", "syllabus_plans", "learning_data"):
+            # if stored is None or empty and default is list, return stored
+            existing = self.__getitem__(key)
+            if existing is None:
+                self.__setitem__(key, default)
+                return default
+            return existing
+        if val is None:
+            self.__setitem__(key, default)
+            return default
+        return val
+
+    def to_dict(self):
+        return {
+            "id": self.id, "email": self.email, "username": self.username,
+            "current_energy": self.current_energy, "last_taunt": self.last_taunt,
+            "learning_data": self.learning_data or {}, "quiz_session": self.quiz_session,
+            "created_at": self.created_at.isoformat() if self.created_at else None
+        }
+
+class Task(db.Model):
+    __tablename__ = "tasks"
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    name = db.Column(db.String(300), nullable=False)
+    start_time = db.Column(db.String(10), default="09:00")
+    end_time = db.Column(db.String(10), default="10:00")
+    date = db.Column(db.String(10), index=True)  # YYYY-MM-DD
+    priority = db.Column(db.String(5), default="P2")
+    energy = db.Column(db.String(10), default="Med")
+    completed = db.Column(db.Boolean, default=False)
+    completed_at = db.Column(db.String(30), nullable=True)
+    is_syllabus = db.Column(db.Boolean, default=False)
+    plan_id = db.Column(db.String(36), db.ForeignKey("syllabus_plans.id"), nullable=True)
+    healed = db.Column(db.Boolean, default=False)
+    no_time = db.Column(db.Boolean, default=False)
+    duration = db.Column(db.Integer, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            "id": self.id, "name": self.name, "start_time": self.start_time, "end_time": self.end_time,
+            "date": self.date, "priority": self.priority, "energy": self.energy,
+            "completed": self.completed, "completed_at": self.completed_at,
+            "is_syllabus": self.is_syllabus, "plan_id": self.plan_id,
+            "healed": self.healed, "no_time": self.no_time, "duration": self.duration
+        }
+
+class FocusSession(db.Model):
+    __tablename__ = "focus_sessions"
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    date = db.Column(db.String(10), index=True)
+    seconds = db.Column(db.Integer, nullable=False)
+    mode = db.Column(db.String(20), default="timer")
+    hour = db.Column(db.Integer, nullable=True)
+    start_hour = db.Column(db.Integer, nullable=True)
+    duration_min = db.Column(db.Integer, nullable=True)
+
+class SyllabusPlan(db.Model):
+    __tablename__ = "syllabus_plans"
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    exam = db.Column(db.String(100))
+    subject = db.Column(db.String(200))
+    syllabus = db.Column(db.Text)
+    exam_date = db.Column(db.String(10))
+    daily_hours = db.Column(db.Integer, default=3)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    days_generated = db.Column(db.Integer, default=0)
+    total_tasks = db.Column(db.Integer, default=0)
+    days_left_total = db.Column(db.Integer, default=0)
+
+    def to_dict(self):
+        return {
+            "id": self.id, "exam": self.exam, "subject": self.subject, "syllabus": self.syllabus,
+            "exam_date": self.exam_date, "daily_hours": self.daily_hours,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "days_generated": self.days_generated, "total_tasks": self.total_tasks, "days_left_total": self.days_left_total
+        }
+
+# Create tables on startup
+with app.app_context():
+    db.create_all()
 
 
 def create_user(username, email, password):
-    user = {
-        "username": username,
-        "email": email,
-        "password": password,
-        "created_at": datetime.now().isoformat(),
-        "current_energy": "Active",
-        "focus_sessions": [],
-        "tasks": [],
-        "syllabus_plans": [],
-        # AI Learning System Data
-        "learning_data": {
-            "energy_reports": [],      # {date, hour, energy_level, source}
-            "completion_patterns": [], # {date, hour, task_type, duration, completed}
-            "focus_sessions_detailed": [], # {date, start_hour, duration_min, mode}
-            "sleep_wake": [],          # {date, sleep_time, wake_time}
-            "routine_version": 0,
-            "last_analyzed": None,
-            "personal_routine": None,
-            "energy_model": None
-        }
-    }
-    users_db[email] = user
+    existing = User.query.filter_by(email=email).first()
+    if existing:
+        return existing
+    user = User(
+        username=username, email=email, password=password,
+        current_energy="Active",
+        learning_data={
+            "energy_reports": [], "completion_patterns": [], "focus_sessions_detailed": [],
+            "sleep_wake": [], "routine_version": 0, "last_analyzed": None, "personal_routine": None, "energy_model": None
+        },
+        quiz_history=[]
+    )
+    db.session.add(user)
+    db.session.commit()
     return user
+
+def get_user_by_email(email):
+    return User.query.filter_by(email=email).first()
+
+def _user_tasks(user):
+    return Task.query.filter_by(user_id=user.id).all()
+
+def _user_tasks_dicts(user):
+    return [t.to_dict() for t in _user_tasks(user)]
 
 
 # ---------------------------------------------------------------------------
@@ -89,13 +259,18 @@ from collections import defaultdict, Counter
 
 def record_energy_report(user, hour, energy_level, source="manual"):
     """Record user's energy level at a specific hour"""
-    user.setdefault("learning_data", {}).setdefault("energy_reports", []).append({
+    ld = user.learning_data or {}
+    # ensure mutable tracking
+    if user.learning_data is None:
+        user.learning_data = ld
+    ld.setdefault("energy_reports", []).append({
         "date": datetime.now().strftime("%Y-%m-%d"),
         "hour": hour,
-        "energy": energy_level,  # "Low", "Med", "High"
+        "energy": energy_level,
         "source": source,
         "timestamp": datetime.now().isoformat()
     })
+    from sqlalchemy.orm.attributes import flag_modified; flag_modified(user, "learning_data")
 
 def record_completion(user, task):
     """Record task completion pattern"""
@@ -103,7 +278,10 @@ def record_completion(user, task):
         return
     try:
         dt = datetime.fromisoformat(task["completed_at"])
-        user.setdefault("learning_data", {}).setdefault("completion_patterns", []).append({
+        ld = user.learning_data or {}
+        if user.learning_data is None:
+            user.learning_data = ld
+        ld.setdefault("completion_patterns", []).append({
             "date": dt.strftime("%Y-%m-%d"),
             "hour": dt.hour,
             "task_type": task.get("priority", "P3"),
@@ -111,6 +289,7 @@ def record_completion(user, task):
             "duration_min": int((datetime.fromisoformat(task.get("end_time", "18:00")).replace(year=dt.year, month=dt.month, day=dt.day) - dt).total_seconds() / 60) if task.get("end_time") else 60,
             "completed": True
         })
+        from sqlalchemy.orm.attributes import flag_modified; flag_modified(user, "learning_data")
     except:
         pass
 
@@ -406,7 +585,9 @@ EXAM_CONFIGS = {
 
 def current_user():
     email = session.get("email")
-    return users_db.get(email)
+    if not email:
+        return None
+    return User.query.filter_by(email=email).first()
 
 
 # ---------------------------------------------------------------------------
@@ -420,17 +601,44 @@ def _seed_guest_history(user):
     if user.get("_history_seeded"):
         return
     user["_history_seeded"] = True
+    db.session.commit()
 
 
 @app.before_request
 def ensure_guest_session():
-    if GUEST_EMAIL not in users_db:
-        create_user("Student", GUEST_EMAIL, "")
-    user = users_db[GUEST_EMAIL]
-    _seed_guest_history(user)
+    guest = User.query.filter_by(email=GUEST_EMAIL).first()
+    if not guest:
+        guest = create_user("Student", GUEST_EMAIL, "")
+    _seed_guest_history(guest)
     if not current_user():
         session["email"] = GUEST_EMAIL
-        session["username"] = user["username"]
+        session["username"] = guest.username
+
+
+@app.after_request
+def _commit_after(response):
+    try:
+        # Ensure JSON mutations (including nested dict edits) are persisted
+        # Touch all JSON columns for the current user to force dirty check
+        u = None
+        try:
+            email = session.get("email")
+            if email:
+                u = User.query.filter_by(email=email).first()
+                if u:
+                    from sqlalchemy.orm.attributes import flag_modified
+                    # flag all mutable JSON cols — cheap, ensures inner-dict edits commit
+                    for col in ("tasks_data", "focus_data", "syllabus_data", "learning_data", "quiz_history", "quiz_session"):
+                        try:
+                            flag_modified(u, col)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+    return response
 
 
 def login_required(view):
@@ -1152,7 +1360,11 @@ def api_add_task():
         "is_syllabus": data.get("is_syllabus", False),
         "plan_id": data.get("plan_id"),
     }
-    user_tasks().append(task)
+    # Append via JSON column (MutableList tracks)
+    user = current_user()
+    user.tasks_data.append(task)
+    from sqlalchemy.orm.attributes import flag_modified; flag_modified(user, "tasks_data")
+    db.session.commit()
     return jsonify({"task": task}), 201
 
 
@@ -1160,6 +1372,7 @@ def api_add_task():
 @login_required
 def api_update_task(task_id):
     data = request.get_json(silent=True) or {}
+    user = current_user()
     for task in user_tasks():
         if task["id"] == task_id:
             if "name" in data and (data.get("name") or "").strip():
@@ -1178,6 +1391,8 @@ def api_update_task(task_id):
                     task["date"] = data["date"]
                 except ValueError:
                     pass
+            from sqlalchemy.orm.attributes import flag_modified; flag_modified(user, "tasks_data")
+            db.session.commit()
             return jsonify({"task": task})
     return jsonify({"error": "Task not found."}), 404
 
@@ -1194,6 +1409,8 @@ def api_toggle_task(task_id):
                 auto_record_completion(user, task)
             else:
                 task.pop("completed_at", None)
+            from sqlalchemy.orm.attributes import flag_modified; flag_modified(user, "tasks_data"); flag_modified(user, "learning_data")
+            db.session.commit()
             return jsonify({"task": task})
     return jsonify({"error": "Task not found."}), 404
 
@@ -1201,10 +1418,13 @@ def api_toggle_task(task_id):
 @app.route("/api/tasks/<task_id>", methods=["DELETE"])
 @login_required
 def api_delete_task(task_id):
+    user = current_user()
     tasks = user_tasks()
     for i, task in enumerate(tasks):
         if task["id"] == task_id:
             removed = tasks.pop(i)
+            from sqlalchemy.orm.attributes import flag_modified; flag_modified(user, "tasks_data")
+            db.session.commit()
             return jsonify({"deleted": removed})
     return jsonify({"error": "Task not found."}), 404
 
