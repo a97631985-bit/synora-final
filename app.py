@@ -288,6 +288,98 @@ class User(db.Model):
             "created_at": self.created_at.isoformat() if self.created_at else None
         }
 
+# ---------------------------------------------------------------------------
+# Community Models
+# ---------------------------------------------------------------------------
+class CommunityPost(db.Model):
+    __tablename__ = "community_posts"
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    content = db.Column(db.Text, nullable=False)
+    media_urls = db.Column(db.JSON, default=list)  # list of {type: "image"|"video", url: "..."}
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_pinned = db.Column(db.Boolean, default=False)
+    is_deleted = db.Column(db.Boolean, default=False)
+
+    # Relationships
+    author = db.relationship("User", backref=db.backref("posts", lazy=True))
+    comments = db.relationship("CommunityComment", backref="post", lazy=True, cascade="all, delete-orphan")
+    likes = db.relationship("CommunityLike", backref="post", lazy=True, cascade="all, delete-orphan")
+
+    def to_dict(self, include_comments=False, current_user_id=None):
+        like_count = len(self.likes)
+        liked_by_current = False
+        if current_user_id:
+            liked_by_current = any(l.user_id == current_user_id for l in self.likes)
+        d = {
+            "id": self.id,
+            "author": {"id": self.author.id, "username": self.author.username, "photo_url": self.author.photo_url} if self.author else None,
+            "content": self.content,
+            "media_urls": self.media_urls or [],
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "is_pinned": self.is_pinned,
+            "like_count": like_count,
+            "liked_by_current": liked_by_current,
+            "comment_count": len(self.comments),
+        }
+        if include_comments:
+            d["comments"] = [c.to_dict(current_user_id=current_user_id) for c in self.comments if not c.is_deleted]
+        return d
+
+
+class CommunityComment(db.Model):
+    __tablename__ = "community_comments"
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    post_id = db.Column(db.String(36), db.ForeignKey("community_posts.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    content = db.Column(db.Text, nullable=False)
+    media_urls = db.Column(db.JSON, default=list)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_deleted = db.Column(db.Boolean, default=False)
+
+    author = db.relationship("User", backref=db.backref("comments", lazy=True))
+    likes = db.relationship("CommunityCommentLike", backref="comment", lazy=True, cascade="all, delete-orphan")
+
+    def to_dict(self, current_user_id=None):
+        like_count = len(self.likes)
+        liked_by_current = False
+        if current_user_id:
+            liked_by_current = any(l.user_id == current_user_id for l in self.likes)
+        return {
+            "id": self.id,
+            "post_id": self.post_id,
+            "author": {"id": self.author.id, "username": self.author.username, "photo_url": self.author.photo_url} if self.author else None,
+            "content": self.content,
+            "media_urls": self.media_urls or [],
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "like_count": like_count,
+            "liked_by_current": liked_by_current,
+            "is_deleted": self.is_deleted,
+        }
+
+
+class CommunityLike(db.Model):
+    __tablename__ = "community_likes"
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    post_id = db.Column(db.String(36), db.ForeignKey("community_posts.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (db.UniqueConstraint("post_id", "user_id", name="uq_post_user_like"),)
+
+
+class CommunityCommentLike(db.Model):
+    __tablename__ = "community_comment_likes"
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    comment_id = db.Column(db.String(36), db.ForeignKey("community_comments.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (db.UniqueConstraint("comment_id", "user_id", name="uq_comment_user_like"),)
+
+
 class Task(db.Model):
     __tablename__ = "tasks"
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -375,6 +467,19 @@ with app.app_context():
             conn.execute(_t("UPDATE users SET is_active = TRUE WHERE is_active IS NULL"))
     except Exception as _e:
         print(f"[MIGRATE] backfill skipped: {_e}")
+
+    # Ensure community tables exist (create_all handles this, but explicit for clarity)
+    try:
+        insp = sa_inspect(db.engine)
+        existing_tables = set(insp.get_table_names())
+        community_tables = {"community_posts", "community_comments", "community_likes", "community_comment_likes"}
+        missing = community_tables - existing_tables
+        if missing:
+            # This will create only the missing tables
+            db.create_all()
+            print(f"[MIGRATE] created community tables: {missing}")
+    except Exception as _e:
+        print(f"[MIGRATE] community tables check skipped: {_e}")
 
 
 
@@ -1288,6 +1393,12 @@ def api_quiz_history():
 @login_required
 def planner():
     return render_template("planner.html", active_page="planner", exam_configs=EXAM_CONFIGS)
+
+
+@app.route("/community")
+@login_required
+def community():
+    return render_template("community.html", active_page="community")
 
 
 @app.route("/api/syllabus/plans", methods=["GET"])
@@ -2772,6 +2883,185 @@ def api_learning_status():
         "last_analyzed": ld.get("last_analyzed"),
         "ready_for_routine": len(set(r["date"] for r in reports)) >= 3
     })
+
+
+# ---------------------------------------------------------------------------
+# Community API Routes
+# ---------------------------------------------------------------------------
+@app.route("/api/community/posts", methods=["GET"])
+@login_required
+def api_community_posts():
+    """Get paginated feed of community posts"""
+    page = max(1, int(request.args.get("page", 1)))
+    per_page = min(20, int(request.args.get("per_page", 10)))
+    user = current_user()
+    
+    query = CommunityPost.query.filter_by(is_deleted=False).order_by(
+        CommunityPost.is_pinned.desc(), CommunityPost.created_at.desc()
+    )
+    total = query.count()
+    posts = query.offset((page - 1) * per_page).limit(per_page).all()
+    
+    return jsonify({
+        "posts": [p.to_dict(current_user_id=user.id) for p in posts],
+        "page": page,
+        "per_page": per_page,
+        "total": total,
+        "pages": max(1, (total + per_page - 1) // per_page)
+    })
+
+
+@app.route("/api/community/posts", methods=["POST"])
+@login_required
+def api_community_create_post():
+    """Create a new community post"""
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    content = (data.get("content") or "").strip()
+    media_urls = data.get("media_urls") or []
+    
+    if not content and not media_urls:
+        return jsonify({"error": "Post must have content or media"}), 400
+    if len(content) > 5000:
+        return jsonify({"error": "Content too long (max 5000 chars)"}), 400
+    
+    # Validate media URLs
+    valid_media = []
+    for m in media_urls:
+        if isinstance(m, dict) and m.get("type") in ("image", "video") and m.get("url"):
+            valid_media.append({"type": m["type"], "url": m["url"]})
+    
+    post = CommunityPost(
+        user_id=user.id,
+        content=content,
+        media_urls=valid_media
+    )
+    db.session.add(post)
+    db.session.commit()
+    
+    return jsonify({"ok": True, "post": post.to_dict(current_user_id=user.id)}), 201
+
+
+@app.route("/api/community/posts/<post_id>", methods=["GET"])
+@login_required
+def api_community_get_post(post_id):
+    """Get a single post with comments"""
+    user = current_user()
+    post = db.session.get(CommunityPost, post_id)
+    if not post or post.is_deleted:
+        return jsonify({"error": "Post not found"}), 404
+    return jsonify({"post": post.to_dict(include_comments=True, current_user_id=user.id)})
+
+
+@app.route("/api/community/posts/<post_id>", methods=["DELETE"])
+@login_required
+def api_community_delete_post(post_id):
+    """Delete own post (or admin can delete any)"""
+    user = current_user()
+    post = db.session.get(CommunityPost, post_id)
+    if not post:
+        return jsonify({"error": "Post not found"}), 404
+    # Allow if author or admin
+    is_admin = user.email == os.environ.get("ADMIN_EMAIL", "admin@synora.app")
+    if post.user_id != user.id and not is_admin:
+        return jsonify({"error": "Not authorized"}), 403
+    post.is_deleted = True
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/community/posts/<post_id>/like", methods=["POST"])
+@login_required
+def api_community_toggle_like(post_id):
+    """Like or unlike a post"""
+    user = current_user()
+    post = db.session.get(CommunityPost, post_id)
+    if not post or post.is_deleted:
+        return jsonify({"error": "Post not found"}), 404
+    
+    existing = CommunityLike.query.filter_by(post_id=post_id, user_id=user.id).first()
+    if existing:
+        db.session.delete(existing)
+        db.session.commit()
+        return jsonify({"ok": True, "liked": False, "like_count": len(post.likes)})
+    else:
+        like = CommunityLike(post_id=post_id, user_id=user.id)
+        db.session.add(like)
+        db.session.commit()
+        return jsonify({"ok": True, "liked": True, "like_count": len(post.likes) + 1})
+
+
+@app.route("/api/community/posts/<post_id>/comments", methods=["POST"])
+@login_required
+def api_community_add_comment(post_id):
+    """Add a comment to a post"""
+    user = current_user()
+    post = db.session.get(CommunityPost, post_id)
+    if not post or post.is_deleted:
+        return jsonify({"error": "Post not found"}), 404
+    
+    data = request.get_json(silent=True) or {}
+    content = (data.get("content") or "").strip()
+    media_urls = data.get("media_urls") or []
+    
+    if not content and not media_urls:
+        return jsonify({"error": "Comment must have content or media"}), 400
+    if len(content) > 2000:
+        return jsonify({"error": "Comment too long (max 2000 chars)"}), 400
+    
+    valid_media = []
+    for m in media_urls:
+        if isinstance(m, dict) and m.get("type") in ("image", "video") and m.get("url"):
+            valid_media.append({"type": m["type"], "url": m["url"]})
+    
+    comment = CommunityComment(
+        post_id=post_id,
+        user_id=user.id,
+        content=content,
+        media_urls=valid_media
+    )
+    db.session.add(comment)
+    db.session.commit()
+    
+    return jsonify({"ok": True, "comment": comment.to_dict(current_user_id=user.id)}), 201
+
+
+@app.route("/api/community/comments/<comment_id>", methods=["DELETE"])
+@login_required
+def api_community_delete_comment(comment_id):
+    """Delete own comment (or admin/post author can delete)"""
+    user = current_user()
+    comment = db.session.get(CommunityComment, comment_id)
+    if not comment:
+        return jsonify({"error": "Comment not found"}), 404
+    post = db.session.get(CommunityPost, comment.post_id)
+    is_admin = user.email == os.environ.get("ADMIN_EMAIL", "admin@synora.app")
+    if comment.user_id != user.id and (not post or post.user_id != user.id) and not is_admin:
+        return jsonify({"error": "Not authorized"}), 403
+    comment.is_deleted = True
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/api/community/comments/<comment_id>/like", methods=["POST"])
+@login_required
+def api_community_toggle_comment_like(comment_id):
+    """Like or unlike a comment"""
+    user = current_user()
+    comment = db.session.get(CommunityComment, comment_id)
+    if not comment or comment.is_deleted:
+        return jsonify({"error": "Comment not found"}), 404
+    
+    existing = CommunityCommentLike.query.filter_by(comment_id=comment_id, user_id=user.id).first()
+    if existing:
+        db.session.delete(existing)
+        db.session.commit()
+        return jsonify({"ok": True, "liked": False, "like_count": len(comment.likes)})
+    else:
+        like = CommunityCommentLike(comment_id=comment_id, user_id=user.id)
+        db.session.add(like)
+        db.session.commit()
+        return jsonify({"ok": True, "liked": True, "like_count": len(comment.likes) + 1})
 
 
 # ---------------------------------------------------------------------------

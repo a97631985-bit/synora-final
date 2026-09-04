@@ -1,0 +1,478 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>{% include "head.html" %}</head>
+<body class="bg-background text-on-surface antialiased min-h-screen selection:bg-primary-container selection:text-on-primary-container">
+<div class="ambient-bg"></div>
+{% include "sidebar.html" %}
+
+<div class="md:ml-64 min-h-screen flex flex-col relative">
+  <header class="flex justify-between items-center px-6 py-4 bg-surface/40 backdrop-blur-md sticky top-0 z-40 border-b border-white/5">
+    <div class="flex items-center gap-4">
+      <span class="text-xl font-semibold text-on-surface">Community</span>
+    </div>
+    <div class="flex items-center gap-2">
+      <div class="w-9 h-9 rounded-full synora-gradient flex items-center justify-center text-on-primary font-bold ml-2 shadow-[0_0_16px_rgba(154,211,182,0.35)]">
+        {{ session.username[0]|upper }}
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 p-5 md:p-10 max-w-3xl mx-auto w-full pb-16">
+    
+    <!-- Create Post Card -->
+    <div id="createPostCard" class="glass-panel rounded-2xl p-4 mb-6 border border-white/5">
+      <div class="flex items-start gap-3">
+        <div class="w-10 h-10 rounded-full synora-gradient flex items-center justify-center text-on-primary font-bold shrink-0">
+          {{ (session.username or 'U')[:1]|upper }}
+        </div>
+        <div class="flex-1 min-w-0">
+          <button id="openCreatePostBtn" class="w-full text-left px-4 py-3 bg-surface-container-low rounded-xl border border-white/5 placeholder:text-on-surface-variant transition-all hover:border-primary/30 focus:outline-none focus:ring-2 focus:ring-primary/20" 
+                  style="min-height: 60px;" aria-label="Create a post">
+            What's on your mind, {{ session.username or 'Student' }}?
+          </button>
+          <div id="createPostExpanded" class="hidden mt-3 space-y-3">
+            <textarea id="postContent" rows="3" class="w-full bg-surface-container-low border border-white/5 rounded-xl px-4 py-3 text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20 resize-none" placeholder="Share your thoughts, progress, questions..."></textarea>
+            <div id="mediaPreview" class="hidden space-y-2"></div>
+            <div class="flex items-center justify-between pt-2 border-t border-white/5">
+              <div class="flex gap-2">
+                <button type="button" id="addImageBtn" class="btn-ghost text-sm" aria-label="Add image"><span class="material-symbols-outlined align-middle mr-1">add_photo_alternate</span> Image</button>
+                <button type="button" id="addVideoBtn" class="btn-ghost text-sm" aria-label="Add video"><span class="material-symbols-outlined align-middle mr-1">videocam</span> Video</button>
+              </div>
+              <div class="flex gap-2">
+                <button type="button" id="cancelPostBtn" class="btn-ghost text-sm">Cancel</button>
+                <button type="button" id="submitPostBtn" class="btn-primary text-sm" disabled><span class="material-symbols-outlined align-middle mr-1">send</span> Post</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Posts Feed -->
+    <div id="postsFeed" class="space-y-4">
+      <!-- Posts rendered here -->
+    </div>
+
+    <!-- Pagination -->
+    <div id="pagination" class="flex justify-center gap-2 mt-6" hidden>
+      <button id="prevPage" class="btn-ghost" disabled>Previous</button>
+      <span id="pageInfo" class="flex items-center text-on-surface-variant text-sm"></span>
+      <button id="nextPage" class="btn-ghost" disabled>Next</button>
+    </div>
+
+    <!-- Empty State -->
+    <div id="emptyState" class="hidden text-center py-12">
+      <span class="material-symbols-outlined text-6xl text-on-surface-variant/30">forum</span>
+      <h3 class="mt-4 text-lg font-semibold">No posts yet</h3>
+      <p class="text-on-surface-variant text-sm mt-1">Be the first to share something!</p>
+    </div>
+
+  </main>
+</div>
+
+<!-- Create Post Modal (for mobile) -->
+<div id="createPostModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm">
+  <div class="glass-panel rounded-2xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between p-4 border-b border-white/5 sticky top-0 bg-surface z-10">
+      <h2 class="font-bold">Create Post</h2>
+      <button id="closeModalBtn" class="btn-ghost p-2" aria-label="Close"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="p-4 space-y-4">
+      <textarea id="modalPostContent" rows="4" class="w-full bg-surface-container-low border border-white/5 rounded-xl px-4 py-3 text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20 resize-none" placeholder="Share your thoughts..."></textarea>
+      <div id="modalMediaPreview" class="hidden space-y-2"></div>
+      <div class="flex gap-2">
+        <button type="button" id="modalAddImageBtn" class="btn-ghost flex-1"><span class="material-symbols-outlined mr-1">add_photo_alternate</span> Image</button>
+        <button type="button" id="modalAddVideoBtn" class="btn-ghost flex-1"><span class="material-symbols-outlined mr-1">videocam</span> Video</button>
+      </div>
+      <div class="flex gap-2 pt-2 border-t border-white/5">
+        <button type="button" id="modalCancelBtn" class="btn-ghost flex-1">Cancel</button>
+        <button type="button" id="modalSubmitBtn" class="btn-primary flex-1" disabled><span class="material-symbols-outlined mr-1">send</span> Post</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const API = '/api/community';
+let currentPage = 1;
+let isLoading = false;
+let hasMore = true;
+
+// ---------- Helpers ----------
+function $(sel, ctx=document) { return ctx.querySelector(sel); }
+function $all(sel, ctx=document) { return [...ctx.querySelectorAll(sel)]; }
+function timeAgo(iso) {
+  const diff = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+  if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+  if (diff < 604800) return Math.floor(diff/86400) + 'd ago';
+  return new Date(iso).toLocaleDateString();
+}
+function escapeHtml(str) {
+  return str.replace(/[&<>"']/g, c => ({'&':'&','<':'<','>':'>','"':'"',"'":'''}[c]));
+}
+function nl2br(str) {
+  return escapeHtml(str).replace(/\n/g, '<br>');
+}
+
+// ---------- Modal / Create Post UI ----------
+const createCard = $('#createPostCard');
+const expanded = $('#createPostExpanded');
+const openBtn = $('#openCreatePostBtn');
+const cancelBtn = $('#cancelPostBtn');
+const submitBtn = $('#submitPostBtn');
+const contentEl = $('#postContent');
+const mediaPreview = $('#mediaPreview');
+const addImageBtn = $('#addImageBtn');
+const addVideoBtn = $('#addVideoBtn');
+const modal = $('#createPostModal');
+const modalContent = $('#modalPostContent');
+const modalMediaPreview = $('#modalMediaPreview');
+const modalAddImage = $('#modalAddImageBtn');
+const modalAddVideo = $('#modalAddVideoBtn');
+const modalCancel = $('#modalCancelBtn');
+const modalSubmit = $('#modalSubmitBtn');
+const closeModal = $('#closeModalBtn');
+
+let pendingMedia = []; // {type, url}
+
+function openComposer() {
+  expanded.classList.remove('hidden');
+  openBtn.classList.add('hidden');
+  contentEl.focus();
+}
+function closeComposer() {
+  expanded.classList.add('hidden');
+  openBtn.classList.remove('hidden');
+  contentEl.value = '';
+  pendingMedia = [];
+  renderMediaPreview();
+  submitBtn.disabled = true;
+}
+function openModal() {
+  modal.classList.remove('hidden');
+  modal.classList.add('flex');
+  modalContent.focus();
+}
+function closeModalFn() {
+  modal.classList.add('hidden');
+  modal.classList.remove('flex');
+  modalContent.value = '';
+  pendingMedia = [];
+  renderModalMediaPreview();
+  modalSubmit.disabled = true;
+}
+openBtn.onclick = () => window.innerWidth < 640 ? openModal() : openComposer();
+cancelBtn.onclick = closeComposer;
+modalCancel.onclick = closeModalFn;
+closeModal.onclick = closeModalFn;
+modal.onclick = e => { if (e.target === modal) closeModalFn(); };
+
+function renderMediaPreview() {
+  mediaPreview.innerHTML = pendingMedia.map((m, i) => `
+    <div class="relative group">
+      ${m.type === 'image' ? `<img src="${escapeHtml(m.url)}" class="rounded-xl max-h-48 w-auto">` : `<video src="${escapeHtml(m.url)}" class="rounded-xl max-h-48 w-auto" controls></video>`}
+      <button type="button" data-idx="${i}" class="remove-media absolute top-2 right-2 p-1 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"><span class="material-symbols-outlined">close</span></button>
+    </div>
+  `).join('');
+  mediaPreview.classList.toggle('hidden', pendingMedia.length === 0);
+  mediaPreview.querySelectorAll('.remove-media').forEach(b => b.onclick = () => { pendingMedia.splice(+b.dataset.idx, 1); renderMediaPreview(); renderModalMediaPreview(); updateSubmitState(); });
+}
+function renderModalMediaPreview() {
+  modalMediaPreview.innerHTML = pendingMedia.map((m, i) => `
+    <div class="relative group">
+      ${m.type === 'image' ? `<img src="${escapeHtml(m.url)}" class="rounded-xl max-h-48 w-auto">` : `<video src="${escapeHtml(m.url)}" class="rounded-xl max-h-48 w-auto" controls></video>`}
+      <button type="button" data-idx="${i}" class="remove-media absolute top-2 right-2 p-1 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"><span class="material-symbols-outlined">close</span></button>
+    </div>
+  `).join('');
+  modalMediaPreview.classList.toggle('hidden', pendingMedia.length === 0);
+  modalMediaPreview.querySelectorAll('.remove-media').forEach(b => b.onclick = () => { pendingMedia.splice(+b.dataset.idx, 1); renderMediaPreview(); renderModalMediaPreview(); updateSubmitState(); });
+}
+function addMedia(type) {
+  const url = prompt(`Paste ${type} URL (direct link to image/video):`);
+  if (url && url.trim()) {
+    pendingMedia.push({type, url: url.trim()});
+    renderMediaPreview();
+    renderModalMediaPreview();
+    updateSubmitState();
+  }
+}
+addImageBtn.onclick = () => addMedia('image');
+addVideoBtn.onclick = () => addMedia('video');
+modalAddImage.onclick = () => addMedia('image');
+modalAddVideo.onclick = () => addMedia('video');
+
+function updateSubmitState() {
+  const hasContent = (contentEl.value.trim() || modalContent.value.trim()) || pendingMedia.length > 0;
+  submitBtn.disabled = !hasContent;
+  modalSubmit.disabled = !hasContent;
+}
+contentEl.addEventListener('input', updateSubmitState);
+modalContent.addEventListener('input', updateSubmitState);
+
+// ---------- Submit Post ----------
+async function submitPost() {
+  const text = (window.innerWidth < 640 ? modalContent : contentEl).value.trim();
+  if (!text && pendingMedia.length === 0) return;
+  submitBtn.disabled = true; modalSubmit.disabled = true;
+  try {
+    const res = await fetch(`${API}/posts`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({content: text, media_urls: pendingMedia})
+    });
+    const data = await res.json();
+    if (res.ok) {
+      closeComposer(); closeModalFn();
+      pendingMedia = [];
+      loadPosts(true);
+    } else alert(data.error || 'Failed to create post');
+  } catch (e) { alert('Network error'); }
+  finally { submitBtn.disabled = false; modalSubmit.disabled = false; }
+}
+submitBtn.onclick = submitPost;
+modalSubmit.onclick = submitPost;
+
+// ---------- Posts Feed ----------
+const feed = $('#postsFeed');
+const emptyState = $('#emptyState');
+const pagination = $('#pagination');
+const prevPage = $('#prevPage');
+const nextPage = $('#nextPage');
+const pageInfo = $('#pageInfo');
+
+function renderPost(post) {
+  const isAuthor = post.author?.id === (window.currentUserId || null);
+  const isAdmin = window.isAdmin === true;
+  const canDelete = isAuthor || isAdmin;
+  const mediaHtml = (post.media_urls || []).map(m => 
+    m.type === 'image' ? `<img src="${escapeHtml(m.url)}" class="rounded-xl max-h-64 w-auto my-2 cursor-zoom-in" loading="lazy" onclick="this.requestFullscreen?.()">`
+    : `<video src="${escapeHtml(m.url)}" class="rounded-xl max-h-64 w-auto my-2" controls></video>`
+  ).join('');
+
+  return `
+    <article class="glass-panel rounded-2xl p-4 border border-white/5 post-card" data-id="${post.id}">
+      <div class="flex items-start gap-3">
+        <div class="w-10 h-10 rounded-full synora-gradient flex items-center justify-center text-on-primary font-bold shrink-0">
+          ${post.author?.username?.[0]?.toUpperCase() || '?'}
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="font-semibold">${escapeHtml(post.author?.username || 'Unknown')}</span>
+            ${post.author?.photo_url ? '<span class="material-symbols-outlined text-tertiary text-xs" title="Verified">verified</span>' : ''}
+            <span class="text-on-surface-variant text-xs">${timeAgo(post.created_at)}</span>
+            ${post.is_pinned ? '<span class="px-2 py-0.5 text-xs bg-amber-500/20 text-amber-400 rounded-full border border-amber-500/30">Pinned</span>' : ''}
+          </div>
+          <p class="mt-2 whitespace-pre-wrap text-sm">${nl2br(post.content)}</p>
+          ${mediaHtml}
+          <div class="flex items-center gap-4 mt-3 pt-3 border-t border-white/5">
+            <button class="like-btn flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors ${post.liked_by_current ? 'text-primary' : ''}" data-id="${post.id}" aria-pressed="${post.liked_by_current}">
+              <span class="material-symbols-outlined ${post.liked_by_current ? 'text-primary' : ''}">${post.liked_by_current ? 'favorite' : 'favorite_border'}</span>
+              <span class="like-count">${post.like_count || 0}</span>
+            </button>
+            <button class="comment-toggle-btn flex items-center gap-1 text-on-surface-variant hover:text-tertiary transition-colors" data-id="${post.id}">
+              <span class="material-symbols-outlined">chat_bubble_outline</span>
+              <span>${post.comment_count || 0}</span>
+            </button>
+            ${canDelete ? `<button class="delete-post-btn ml-auto text-on-surface-variant hover:text-error transition-colors text-sm" data-id="${post.id}">Delete</button>` : ''}
+          </div>
+          <!-- Comments Section -->
+          <div class="comments-section hidden mt-4 space-y-3" data-post-id="${post.id}">
+            <div class="flex items-start gap-2">
+              <div class="w-8 h-8 rounded-full synora-gradient flex items-center justify-center text-on-primary text-sm font-bold shrink-0">
+                ${(window.currentUsername || 'U')[0].toUpperCase()}
+              </div>
+              <div class="flex-1">
+                <input type="text" class="comment-input w-full bg-surface-container-low border border-white/5 rounded-xl px-4 py-2 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary/50" placeholder="Write a comment..." aria-label="Comment">
+              </div>
+            </div>
+            <div class="comments-list ml-10 space-y-2">${renderComments(post.comments || [])}</div>
+          </div>
+        </div>
+      </div>
+    </article>
+  `;
+}
+
+function renderComments(comments) {
+  if (!comments.length) return '<div class="text-on-surface-variant text-xs text-center py-2">No comments yet</div>';
+  return comments.map(c => `
+    <div class="comment-item glass-strong rounded-xl p-3 border border-white/5" data-id="${c.id}">
+      <div class="flex items-start gap-2">
+        <div class="w-7 h-7 rounded-full synora-gradient flex items-center justify-center text-on-primary text-xs font-bold shrink-0">
+          ${c.author?.username?.[0]?.toUpperCase() || '?'}
+        </div>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2">
+            <span class="font-medium text-sm">${escapeHtml(c.author?.username || 'Unknown')}</span>
+            <span class="text-on-surface-variant text-xs">${timeAgo(c.created_at)}</span>
+          </div>
+          <p class="text-sm mt-1 whitespace-pre-wrap">${nl2br(c.content)}</p>
+          ${(c.media_urls || []).map(m => m.type === 'image' ? `<img src="${escapeHtml(m.url)}" class="rounded-lg max-h-32 w-auto mt-1">` : `<video src="${escapeHtml(m.url)}" class="rounded-lg max-h-32 w-auto mt-1" controls></video>`).join('')}
+          <div class="flex items-center gap-3 mt-2">
+            <button class="like-comment-btn flex items-center gap-1 text-on-surface-variant hover:text-primary text-xs ${c.liked_by_current ? 'text-primary' : ''}" data-id="${c.id}" aria-pressed="${c.liked_by_current}">
+              <span class="material-symbols-outlined">${c.liked_by_current ? 'favorite' : 'favorite_border'}</span>
+              <span>${c.like_count || 0}</span>
+            </button>
+            ${c.author?.id === (window.currentUserId || null) || window.isAdmin ? `<button class="delete-comment-btn text-on-surface-variant hover:text-error text-xs" data-id="${c.id}">Delete</button>` : ''}
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function loadPosts(reset=false) {
+  if (isLoading) return;
+  if (reset) { currentPage = 1; feed.innerHTML = ''; hasMore = true; }
+  if (!hasMore) return;
+  isLoading = true;
+  try {
+    const res = await fetch(`${API}/posts?page=${currentPage}&per_page=10`);
+    const data = await res.json();
+    if (res.ok) {
+      if (data.posts.length === 0 && currentPage === 1) {
+        emptyState.classList.remove('hidden');
+        feed.classList.add('hidden');
+      } else {
+        emptyState.classList.add('hidden');
+        feed.classList.remove('hidden');
+        data.posts.forEach(p => feed.insertAdjacentHTML('beforeend', renderPost(p)));
+        attachPostListeners();
+      }
+      hasMore = currentPage < data.pages;
+      currentPage++;
+      pagination.hidden = !hasMore && currentPage <= 1;
+      pageInfo.textContent = `Page ${currentPage - 1} of ${data.pages || 1}`;
+      prevPage.disabled = currentPage <= 2;
+      nextPage.disabled = !hasMore;
+    }
+  } catch (e) { console.error(e); }
+  finally { isLoading = false; }
+}
+
+// Attach listeners for dynamically added posts
+function attachPostListeners() {
+  // Like post
+  $all('.like-btn').forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.id;
+      try {
+        const res = await fetch(`${API}/posts/${id}/like`, {method: 'POST'});
+        const data = await res.json();
+        if (res.ok) {
+          btn.classList.toggle('text-primary', data.liked);
+          btn.querySelector('.material-symbols-outlined').textContent = data.liked ? 'favorite' : 'favorite_border';
+          btn.querySelector('.like-count').textContent = data.like_count;
+          btn.setAttribute('aria-pressed', data.liked);
+        }
+      } catch (e) {}
+    };
+  });
+  // Toggle comments
+  $all('.comment-toggle-btn').forEach(btn => {
+    btn.onclick = () => {
+      const section = $(`.comments-section[data-post-id="${btn.dataset.id}"]`);
+      section.classList.toggle('hidden');
+    };
+  });
+  // Delete post
+  $all('.delete-post-btn').forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm('Delete this post?')) return;
+      const id = btn.dataset.id;
+      try {
+        const res = await fetch(`${API}/posts/${id}`, {method: 'DELETE'});
+        if (res.ok) btn.closest('.post-card').remove();
+      } catch (e) {}
+    };
+  });
+  // Add comment
+  $all('.comment-input').forEach(input => {
+    input.addEventListener('keydown', async e => {
+      if (e.key === 'Enter' && !e.shiftKey && input.value.trim()) {
+        e.preventDefault();
+        const postId = input.closest('.comments-section').dataset.postId;
+        const content = input.value.trim();
+        input.value = '';
+        try {
+          const res = await fetch(`${API}/posts/${postId}/comments`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({content})
+          });
+          const data = await res.json();
+          if (res.ok) {
+            const list = input.closest('.comments-section').querySelector('.comments-list');
+            list.insertAdjacentHTML('beforeend', renderComments([data.comment]));
+            attachCommentListeners(list);
+            // Update count
+            const toggleBtn = $(`.comment-toggle-btn[data-id="${postId}"]`);
+            if (toggleBtn) toggleBtn.querySelector('span:last-child').textContent = +toggleBtn.querySelector('span:last-child').textContent + 1;
+          }
+        } catch (e) {}
+      }
+    });
+  });
+}
+
+// Comment listeners (for new comments)
+function attachCommentListeners(container) {
+  $all('.like-comment-btn', container).forEach(btn => {
+    btn.onclick = async () => {
+      const id = btn.dataset.id;
+      try {
+        const res = await fetch(`${API}/comments/${id}/like`, {method: 'POST'});
+        const data = await res.json();
+        if (res.ok) {
+          btn.classList.toggle('text-primary', data.liked);
+          btn.querySelector('.material-symbols-outlined').textContent = data.liked ? 'favorite' : 'favorite_border';
+          btn.querySelector('span:last-child').textContent = data.like_count;
+          btn.setAttribute('aria-pressed', data.liked);
+        }
+      } catch (e) {}
+    };
+  });
+  $all('.delete-comment-btn', container).forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm('Delete this comment?')) return;
+      const id = btn.dataset.id;
+      try {
+        const res = await fetch(`${API}/comments/${id}`, {method: 'DELETE'});
+        if (res.ok) btn.closest('.comment-item').remove();
+      } catch (e) {}
+    };
+  });
+}
+
+// Pagination
+prevPage.onclick = () => { if (currentPage > 2) { currentPage -= 2; loadPosts(); } };
+nextPage.onclick = () => { if (hasMore) loadPosts(); };
+
+// Infinite scroll fallback
+window.addEventListener('scroll', () => {
+  if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 500) {
+    if (hasMore && !isLoading) loadPosts();
+  }
+});
+
+// Init
+window.currentUserId = parseInt('{{ session.get("user_id", 0) }}') || null;
+window.currentUsername = '{{ session.username or "" }}';
+window.isAdmin = {{ 'true' if session.email == (config.get("ADMIN_EMAIL", "admin@synora.app")) else 'false' }};
+loadPosts(true);
+</script>
+
+<style>
+.btn-ghost { background:none; border:1px solid rgba(255,255,255,.1); color:#e1e3e4; padding:6px 12px; border-radius:8px; font-size:13px; cursor:pointer; transition:all .2s; display:inline-flex; align-items:center; gap:6px; }
+.btn-ghost:hover { background:rgba(255,255,255,.05); border-color:rgba(255,255,255,.2); }
+.post-card { animation: fadeIn .3s ease; }
+@keyframes fadeIn { from {opacity:0; transform:translateY(10px)} to {opacity:1; transform:translateY(0)} }
+.comment-item { animation: slideIn .2s ease; }
+@keyframes slideIn { from {opacity:0; transform:translateX(-10px)} to {opacity:1; transform:translateX(0)} }
+input[type="text"].comment-input::placeholder { color: #8a938c; }
+</style>
+  </main>
+</div>
+</body></html>
