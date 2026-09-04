@@ -817,17 +817,17 @@ def _commit_after(response):
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("X-XSS-Protection", "0")  # modern XSS handling, avoid legacy filter
     response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-    # A pragmatic CSP: allow our own styles/scripts and Google Identity (GIS) for OAuth.
+    # A pragmatic CSP: allow our own styles/scripts, Tailwind CDN, and Google Identity (GIS) for OAuth.
     # 'unsafe-inline' is required by Tailwind's injected <style> and some inline scripts.
     if not response.headers.get("Content-Security-Policy"):
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://accounts.google.com https://apis.google.com; "
-            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; "
+            "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://accounts.google.com https://apis.google.com; "
+            "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.gstatic.com; "
             "font-src 'self' https://fonts.gstatic.com data:; "
             "img-src 'self' data: https:; "
             "frame-src https://accounts.google.com https://content.googleapis.com; "
-            "connect-src 'self' https://accounts.google.com https://fonts.googleapis.com https://fonts.gstatic.com; "
+            "connect-src 'self' https://cdn.tailwindcss.com https://accounts.google.com https://fonts.googleapis.com https://fonts.gstatic.com; "
             "base-uri 'self'; form-action 'self'"
         )
     try:
