@@ -265,6 +265,21 @@ class User(db.Model):
             return default
         return val
 
+    def pop(self, key, default=None):
+        """Dict-compatible pop (clears the value for JSON-backed/column fields)."""
+        current = self.get(key, default)
+        if hasattr(self, key):
+            try:
+                setattr(self, key, None)
+            except Exception:
+                pass
+        else:
+            try:
+                delattr(self, key)
+            except AttributeError:
+                pass
+        return current
+
     def to_dict(self):
         return {
             "id": self.id, "email": self.email, "username": self.username,
