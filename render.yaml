@@ -21,11 +21,6 @@ services:
       #   python -c "import secrets; print(secrets.token_hex(32))"
       - key: SYNORA_SECRET
         sync: false
-      # Optional: Gmail app-password for real email OTP
-      - key: MAIL_EMAIL
-        sync: false
-      - key: MAIL_PASSWORD
-        sync: false
       - key: ADMIN_KEY
         value: synora-admin-2026
       # Account that acts as community admin/dev (gets verified badge + can moderate
@@ -39,8 +34,6 @@ services:
         value: "30"
       - key: RATE_LOGIN
         value: "8"
-      - key: RATE_OTP
-        value: "5"
       - key: RATE_SIGNUP
         value: "6"
       - key: RATE_RESET

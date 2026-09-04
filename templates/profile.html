@@ -35,10 +35,75 @@
     <div class="flex-1 min-w-0">
       <div class="text-lg font-bold truncate">{{ user.username }}</div>
       <div class="text-sm text-on-surface-variant truncate">{{ user.email }}</div>
+      {% if user.phone %}<div class="text-xs text-on-surface-variant truncate mt-0.5">{{ user.phone }}</div>{% endif %}
+      <div class="text-xs text-on-surface-variant mt-0.5">Member since {{ stats.member_since }}</div>
     </div>
     <div class="text-xs text-on-surface-variant text-right shrink-0">
       {% if user.email_verified %}<span class="badge text-primary" style="background:rgba(154,211,182,0.1); border:1px solid rgba(154,211,182,0.2)">✓ Email</span>{% endif %}
       {% if user.phone_verified %}<span class="badge text-tertiary" style="background:rgba(76,215,246,0.1); border:1px solid rgba(76,215,246,0.2); margin-left:4px">✓ Phone</span>{% endif %}
+    </div>
+  </div>
+
+  {% if user.exam_goal or user.study_level or user.school or user.age %}
+  <!-- Collected profile -->
+  <div class="card mb-4">
+    <h2 class="font-bold text-base flex items-center gap-2 mb-3"><span class="material-symbols-outlined text-primary">id_card</span> Your Study Profile</h2>
+    <div class="flex flex-wrap gap-2">
+      {% if user.exam_goal %}<span class="badge" style="background:rgba(154,211,182,0.1); border:1px solid rgba(154,211,182,0.2)">🎯 {{ user.exam_goal }}</span>{% endif %}
+      {% if user.study_level %}<span class="badge" style="background:rgba(76,215,246,0.1); border:1px solid rgba(76,215,246,0.2)">📚 {{ user.study_level }}</span>{% endif %}
+      {% if user.school %}<span class="badge" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1)">🏫 {{ user.school }}</span>{% endif %}
+      {% if user.age %}<span class="badge" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1)">🎂 {{ user.age }} yrs</span>{% endif %}
+      {% if user.daily_hours %}<span class="badge" style="background:rgba(255,255,255,0.05); border:1px solid rgba(255,255,255,0.1)">⏰ {{ user.daily_hours }}h/day</span>{% endif %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Your data & insights -->
+  <div class="card mb-4">
+    <h2 class="font-bold text-base flex items-center gap-2 mb-3"><span class="material-symbols-outlined text-primary">insights</span> Your Data & Insights</h2>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div class="p-3 rounded-xl" style="background:rgba(12,15,16,0.6); border:1px solid rgba(255,255,255,0.05)">
+        <div class="text-xl font-extrabold text-primary">{{ stats.streak }}🔥</div>
+        <div class="text-xs text-on-surface-variant mt-1">Day streak <span class="text-on-surface">(best {{ stats.best_streak }})</span></div>
+      </div>
+      <div class="p-3 rounded-xl" style="background:rgba(12,15,16,0.6); border:1px solid rgba(255,255,255,0.05)">
+        <div class="text-xl font-extrabold text-primary">{{ stats.active_days }}</div>
+        <div class="text-xs text-on-surface-variant mt-1">Active days</div>
+      </div>
+      <div class="p-3 rounded-xl" style="background:rgba(12,15,16,0.6); border:1px solid rgba(255,255,255,0.05)">
+        <div class="text-xl font-extrabold text-primary">{{ stats.tasks_done }}<span class="text-sm text-on-surface-variant">/{{ stats.tasks_total }}</span></div>
+        <div class="text-xs text-on-surface-variant mt-1">Tasks done <span class="text-on-surface">({{ stats.completion_rate }}%)</span></div>
+      </div>
+      <div class="p-3 rounded-xl" style="background:rgba(12,15,16,0.6); border:1px solid rgba(255,255,255,0.05)">
+        <div class="text-xl font-extrabold text-tertiary">{{ (stats.focus_minutes / 60)|round(1) }}h</div>
+        <div class="text-xs text-on-surface-variant mt-1">Focus time <span class="text-on-surface">({{ stats.focus_sessions }} sessions)</span></div>
+      </div>
+      <div class="p-3 rounded-xl" style="background:rgba(12,15,16,0.6); border:1px solid rgba(255,255,255,0.05)">
+        <div class="text-xl font-extrabold text-primary">{{ stats.quiz_attempts }}</div>
+        <div class="text-xs text-on-surface-variant mt-1">Quiz attempts</div>
+      </div>
+      <div class="p-3 rounded-xl" style="background:rgba(12,15,16,0.6); border:1px solid rgba(255,255,255,0.05)">
+        <div class="text-xl font-extrabold text-primary">{{ stats.quiz_best }}%</div>
+        <div class="text-xs text-on-surface-variant mt-1">Best quiz score <span class="text-on-surface">(avg {{ stats.quiz_avg }}%)</span></div>
+      </div>
+      <div class="p-3 rounded-xl" style="background:rgba(12,15,16,0.6); border:1px solid rgba(255,255,255,0.05)">
+        <div class="text-xl font-extrabold text-primary">{{ stats.plan_count }}<span class="text-sm text-on-surface-variant"> / {{ stats.subjects_count }}</span></div>
+        <div class="text-xs text-on-surface-variant mt-1">Syllabus plans / subjects</div>
+      </div>
+      <div class="p-3 rounded-xl" style="background:rgba(12,15,16,0.6); border:1px solid rgba(255,255,255,0.05)">
+        <div class="text-xl font-extrabold text-tertiary">{{ stats.energy_reports }}</div>
+        <div class="text-xs text-on-surface-variant mt-1">Energy logs <span class="text-on-surface">({{ stats.energy_days }} days)</span></div>
+      </div>
+    </div>
+    {% if stats.quiz_categories %}
+    <div class="flex flex-wrap gap-2 mt-3">
+      {% for c in stats.quiz_categories %}<span class="badge" style="background:rgba(76,215,246,0.08); border:1px solid rgba(76,215,246,0.2)">🧠 {{ c }}</span>{% endfor %}
+    </div>
+    {% endif %}
+    <div class="flex flex-wrap gap-2 mt-3">
+      <span class="badge" style="background:rgba(154,211,182,0.08); border:1px solid rgba(154,211,182,0.2)">👥 {{ stats.posts_count }} posts</span>
+      <span class="badge" style="background:rgba(154,211,182,0.08); border:1px solid rgba(154,211,182,0.2)">💬 {{ stats.comments_count }} comments</span>
+      <span class="badge" style="background:rgba(154,211,182,0.08); border:1px solid rgba(154,211,182,0.2)">💡 {{ stats.feedback_count }} ideas</span>
     </div>
   </div>
 

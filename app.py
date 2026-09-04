@@ -126,6 +126,39 @@ def _password_ok(password):
 def _sanitize_email(email):
     return (email or "").strip().lower()
 
+
+# Media validation for community posts.
+# * Remote URLs: only HTTPS (prevent javascript:/file: injection).
+# * Data URLs: only image/* (jpg/png/webp/gif) or video/* and bounded size so the
+#   16MB Flask request limit is never abused.
+_IMAGE_MIME = ("image/jpeg", "image/png", "image/webp", "image/gif")
+_MAX_IMAGE_DATAURL = 2_000_000   # ~1.5MB of raw image
+_MAX_VIDEO_DATAURL = 6_000_000   # ~4.5MB of raw video
+def _sanitize_media_urls(media_urls):
+    valid = []
+    for m in (media_urls or []):
+        if not isinstance(m, dict):
+            continue
+        mtype = m.get("type")
+        url = (m.get("url") or "").strip()
+        if mtype not in ("image", "video") or not url:
+            continue
+        ok = False
+        if url.startswith("data:"):
+            # Extract the MIME type (e.g. "image/png" from "data:image/png;base64,...")
+            _, _, mime_part = url.partition(":")
+            header_end = mime_part.find(";")
+            header = mime_part[:header_end] if header_end != -1 else mime_part
+            if mtype == "image":
+                ok = header.lower() in _IMAGE_MIME and len(url) <= _MAX_IMAGE_DATAURL
+            else:
+                ok = header.lower().startswith("video/") and len(url) <= _MAX_VIDEO_DATAURL
+        elif url.startswith("https://") and len(url) <= 2048:
+            ok = True
+        if ok:
+            valid.append({"type": mtype, "url": url})
+    return valid
+
 # --- Database Config: Postgres on Render, SQLite locally ---
 db_url = os.environ.get("DATABASE_URL", "")
 if db_url and db_url.startswith("postgres://"):
@@ -983,17 +1016,19 @@ def _commit_after(response):
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     response.headers.setdefault("X-XSS-Protection", "0")  # modern XSS handling, avoid legacy filter
     response.headers.setdefault("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
-    # A pragmatic CSP: allow our own styles/scripts, Tailwind CDN, and Google Identity (GIS) for OAuth.
+    # A pragmatic CSP: allow our own styles/scripts, Tailwind CDN, and data/blob
+    # media (community image/video uploads are stored as data URLs for zero-cost).
     # 'unsafe-inline' is required by Tailwind's injected <style> and some inline scripts.
     if not response.headers.get("Content-Security-Policy"):
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://accounts.google.com https://apis.google.com; "
+            "script-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com; "
             "style-src 'self' 'unsafe-inline' https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.gstatic.com; "
             "font-src 'self' https://fonts.gstatic.com data:; "
-            "img-src 'self' data: https:; "
-            "frame-src https://accounts.google.com https://content.googleapis.com; "
-            "connect-src 'self' https://cdn.tailwindcss.com https://accounts.google.com https://fonts.googleapis.com https://fonts.gstatic.com; "
+            "img-src 'self' data: blob: https:; "
+            "media-src 'self' data: blob: https:; "
+            "frame-src 'self'; "
+            "connect-src 'self' https://cdn.tailwindcss.com https://fonts.googleapis.com https://fonts.gstatic.com; "
             "base-uri 'self'; form-action 'self'"
         )
     try:
@@ -1024,7 +1059,6 @@ def _commit_after(response):
 AUTH_RATE = {
     "per_ip": int(os.environ.get("RATE_IP", "30")),      # requests / window per IP
     "login": int(os.environ.get("RATE_LOGIN", "8")),     # login attempts / 60s
-    "otp": int(os.environ.get("RATE_OTP", "5")),         # OTP sends or verifies / 60s
     "signup": int(os.environ.get("RATE_SIGNUP", "6")),   # signups / 60s
     "reset": int(os.environ.get("RATE_RESET", "5")),     # password reset requests / 60s
 }
@@ -3111,11 +3145,8 @@ def api_community_create_post():
     if len(content) > 5000:
         return jsonify({"error": "Content too long (max 5000 chars)"}), 400
     
-    # Validate media URLs
-    valid_media = []
-    for m in media_urls:
-        if isinstance(m, dict) and m.get("type") in ("image", "video") and m.get("url"):
-            valid_media.append({"type": m["type"], "url": m["url"]})
+    # Validate media URLs (HTTPS links or data: URLs from client-side uploads)
+    valid_media = _sanitize_media_urls(media_urls)
     
     post = CommunityPost(
         user_id=user.id,
@@ -3196,10 +3227,7 @@ def api_community_add_comment(post_id):
     if len(content) > 2000:
         return jsonify({"error": "Comment too long (max 2000 chars)"}), 400
     
-    valid_media = []
-    for m in media_urls:
-        if isinstance(m, dict) and m.get("type") in ("image", "video") and m.get("url"):
-            valid_media.append({"type": m["type"], "url": m["url"]})
+    valid_media = _sanitize_media_urls(media_urls)
     
     comment = CommunityComment(
         post_id=post_id,
@@ -3441,55 +3469,10 @@ def api_feedback_delete(item_id):
 
 
 # ---------------------------------------------------------------------------
-# Auth Routes — signup/login with Google, OTP, Skip
+# Auth Routes — signup/login (email + password, fully free, no external
+# credentials needed). OTP / Google / SMS were removed to keep the app
+# 100% credential-free for launch.
 # ---------------------------------------------------------------------------
-otp_store = {}  # {target: {otp, kind, expires}}
-
-# ---------------------------------------------------------------------------
-# Email OTP via Gmail SMTP (set env vars on Render / local shell):
-#   MAIL_EMAIL   = your Gmail address
-#   MAIL_PASSWORD= Gmail "App Password" (not your normal password)
-#   MAIL_SMTP    = smtp.gmail.com (default)
-#   MAIL_PORT    = 587 (default)
-# If MAIL_EMAIL is not set, falls back to demo mode (OTP returned in response).
-# ---------------------------------------------------------------------------
-def send_otp_email(to_email, otp):
-    sender = os.environ.get("MAIL_EMAIL", "").strip()
-    password = os.environ.get("MAIL_PASSWORD", "").strip()
-    smtp_host = os.environ.get("MAIL_SMTP", "smtp.gmail.com")
-    smtp_port = int(os.environ.get("MAIL_PORT", "587"))
-    if not sender or not password:
-        return "not_configured"
-    import smtplib
-    from email.mime.text import MIMEText
-    from email.mime.multipart import MIMEMultipart
-    body = f"""Hello from Synora AI!
-
-Your one-time verification code is:
-
-    {otp}
-
-This code expires in 5 minutes. If you didn't request this, you can safely ignore this email.
-
-— Synora AI, your adaptive study companion
-"""
-    msg = MIMEMultipart("alternative")
-    msg["Subject"] = "Your Synora AI verification code"
-    msg["From"] = f"Synora AI <{sender}>"
-    msg["To"] = to_email
-    msg.attach(MIMEText(body, "plain"))
-    try:
-        server = smtplib.SMTP(smtp_host, smtp_port)
-        server.ehlo()
-        server.starttls()
-        server.ehlo()
-        server.login(sender, password)
-        server.sendmail(sender, [to_email], msg.as_string())
-        server.quit()
-        return "sent"
-    except Exception as e:
-        print(f"[OTP-EMAIL] failed: {e}")
-        return "error"
 
 @app.route("/signup", methods=["GET"])
 def signup_page():
@@ -3513,8 +3496,8 @@ def signup_post():
         return render_template("signup_new.html", error="Name should be 2–50 letters/numbers (no symbols)")
     if not _valid_email(email):
         return render_template("signup_new.html", error="Please enter a valid email address")
-    if not _valid_phone(phone):
-        return render_template("signup_new.html", error="Please enter a valid phone number")
+    if phone and not _valid_phone(phone):
+        return render_template("signup_new.html", error="Please enter a valid phone number (optional)")
     ok, reason = _password_ok(password)
     if not ok:
         return render_template("signup_new.html", error=reason)
@@ -3530,12 +3513,10 @@ def signup_post():
         age = int(age) if age else None
     except:
         age = None
-    # Check verified flags from session (set via OTP verify)
-    email_verified = session.get(f"otp_verified_email_{email}") is True
-    phone_verified = session.get(f"otp_verified_phone_{phone}") is True if phone else False
+    # Email is implicitly verified via the signup itself (no OTP provider needed).
     user = User(
-        username=username, email=email, password=_hash_password(password), phone=phone,
-        phone_verified=phone_verified, email_verified=email_verified,
+        username=username, email=email, password=_hash_password(password), phone=phone or None,
+        phone_verified=False, email_verified=True,
         exam_goal=exam_goal, study_level=study_level, daily_hours=daily_hours,
         school=school, age=age, onboarded=bool(exam_goal or study_level),
         auth_provider="email"
@@ -3576,115 +3557,6 @@ def login_post():
 def logout():
     session.clear()
     return redirect(url_for("login_page"))
-
-@app.route("/auth/send-otp", methods=["POST"])
-@rate_limit(AUTH_RATE["otp"], AUTH_WINDOW, key_parts=lambda: ["otp-send"])
-def auth_send_otp():
-    data = request.get_json(silent=True) or {}
-    kind = data.get("kind")  # email/phone
-    target = (data.get("target") or "").strip().lower()
-    if kind == "email" and not _valid_email(target):
-        return jsonify({"error": "Valid email required"}), 400
-    if kind == "phone" and not _valid_phone(target):
-        return jsonify({"error": "Valid phone required"}), 400
-    if kind not in ("email", "phone") or not target:
-        return jsonify({"error": "Invalid request"}), 400
-    otp = f"{random.randint(100000, 999999)}"
-    otp_store[target] = {"otp": otp, "kind": kind, "expires": datetime.now() + timedelta(minutes=5)}
-    # Try to send a real email OTP
-    delivery = "demo"
-    if kind == "email":
-        delivery = send_otp_email(target, otp)
-    else:
-        # Phone: real SMS needs a provider (Fast2SMS/Twilio). Demo for now.
-        delivery = "demo"
-    print(f"[OTP] {kind} {target} -> {otp} (delivery={delivery})")
-    resp = {"ok": True, "message": f"OTP sent to {target}", "delivery": delivery}
-    # If email wasn't actually sent (not configured or failed), include the OTP
-    # so the user can still proceed in demo mode.
-    if delivery in ("demo", "not_configured", "error"):
-        resp["otp"] = otp
-        resp["delivery"] = "demo"
-    return jsonify(resp)
-
-@app.route("/auth/verify-otp", methods=["POST"])
-@rate_limit(AUTH_RATE["otp"], AUTH_WINDOW, key_parts=lambda: ["otp-verify"])
-def auth_verify_otp():
-    data = request.get_json(silent=True) or {}
-    kind = data.get("kind")
-    target = (data.get("target") or "").strip().lower()
-    otp = (data.get("otp") or "").strip()
-    login = data.get("login") is True
-    if kind not in ("email", "phone") or not target:
-        return jsonify({"error": "Invalid request"}), 400
-    if not otp or not otp.isdigit() or len(otp) != 6:
-        return jsonify({"error": "Invalid OTP format"}), 400
-    rec = otp_store.get(target)
-    if not rec or rec["otp"] != otp:
-        return jsonify({"error": "Invalid OTP"}), 400
-    if datetime.now() > rec["expires"]:
-        return jsonify({"error": "OTP expired"}), 400
-    # Mark verified in session
-    session[f"otp_verified_{kind}_{target}"] = True
-    # If login flow, actually log the user in
-    if login:
-        user = User.query.filter_by(email=target).first() if kind=="email" else User.query.filter_by(phone=target).first()
-        if not user:
-            # Auto-create user on OTP login (passwordless)
-            username = target.split("@")[0] if "@" in target else target
-            user = User(username=username, email=target if kind=="email" else f"{target}@phone.local", phone=target if kind=="phone" else None,
-                        password="", phone_verified=(kind=="phone"), email_verified=(kind=="email"), auth_provider=kind)
-            db.session.add(user)
-            db.session.commit()
-        else:
-            if user.is_active is False:
-                return jsonify({"error": "This account has been disabled by an administrator"}), 403
-            if kind=="email":
-                user.email_verified = True
-            else:
-                user.phone_verified = True
-            db.session.commit()
-        session["email"] = user.email
-        session["username"] = user.username
-        return jsonify({"ok": True, "message": "Logged in"})
-    return jsonify({"ok": True, "message": "Verified"})
-
-@app.route("/auth/google", methods=["POST"])
-@rate_limit(AUTH_RATE["login"], AUTH_WINDOW, key_parts=lambda: ["google"])
-def auth_google():
-    data = request.get_json(silent=True) or {}
-    email = (data.get("email") or "").strip().lower()
-    name = (data.get("name") or "").strip()
-    picture = (data.get("picture") or "").strip()
-    if not _valid_email(email):
-        return jsonify({"error": "Valid email required"}), 400
-    if name and (len(name) > 50 or not _valid_username(name)):
-        name = ""  # sanitize: drop invalid names rather than reject
-    # Demo mode: allow a demo flag to skip strict verification.
-    # In production, verify the Google ID token server-side.
-    if picture and not picture.startswith("https://"):
-        picture = ""  # avoid exfil/injection via arbitrary scheme
-    user = User.query.filter_by(email=email).first()
-    if user and user.is_active is False:
-        return jsonify({"error": "This account has been disabled by an administrator"}), 403
-    if not user:
-        username = name or email.split("@")[0]
-        if len(username) < 2:
-            username = email.split("@")[0]
-        user = User(username=username, email=email, password="",
-                    email_verified=True, auth_provider="google")
-        db.session.add(user)
-        db.session.commit()
-    # Store picture if provided
-    if picture:
-        try:
-            user.photo_url = picture
-            db.session.commit()
-        except Exception:
-            pass
-    session["email"] = user.email
-    session["username"] = user.username
-    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------------
@@ -3739,7 +3611,101 @@ def privacy():
 @login_required
 def profile_page():
     user = current_user()
-    return render_template("profile.html", user=user)
+    return render_template("profile.html", user=user, stats=_profile_stats(user))
+
+
+def _profile_stats(user):
+    """Aggregate every piece of data we collect about a user."""
+    tasks = user.get("tasks") or []
+    focus = user.get("focus_sessions") or []
+    quiz = user.get("quiz_history") or []
+    syllabus = user.get("syllabus_plans") or []
+    energy_reports = (user.get("learning_data") or {}).get("energy_reports") or []
+
+    # Tasks
+    tasks_total = len(tasks)
+    tasks_done = sum(1 for t in tasks if t.get("completed"))
+    completion_rate = round(tasks_done * 100 / tasks_total) if tasks_total else 0
+
+    # Focus
+    total_secs = sum(int(s.get("seconds") or 0) for s in focus)
+    total_sessions = len(focus)
+    focus_minutes = total_secs // 60
+
+    # Quiz
+    quiz_attempts = len(quiz)
+    quiz_best = 0
+    quiz_avg = 0
+    if quiz_attempts:
+        scores = []
+        for q in quiz:
+            s = q.get("percentage") if q.get("percentage") is not None else (
+                round(q.get("score", 0) * 100 / q.get("max_score", 1)) if q.get("max_score") else 0)
+            scores.append(max(0, int(s)))
+        quiz_best = max(scores)
+        quiz_avg = sum(scores) // len(scores)
+    quiz_categories = sorted({q.get("category", "General") for q in quiz})
+
+    # Syllabus plans
+    plan_count = len(syllabus)
+    subjects = set()
+    for p in syllabus:
+        for s in (p.get("subjects") or []):
+            if s:
+                subjects.add(s["name"] if isinstance(s, dict) else str(s))
+
+    # Energy / learning data
+    energy_days = len({r.get("date") for r in energy_reports if r.get("date")})
+    total_reports = len(energy_reports)
+
+    # Community activity
+    posts_count = CommunityPost.query.filter_by(user_id=user.id, is_deleted=False).count()
+    comments_count = CommunityComment.query.filter_by(user_id=user.id).count()
+    feedback_count = FeedbackItem.query.filter_by(user_id=user.id).count()
+
+    # Active days / streak
+    active = _get_active_dates(user)
+    today = datetime.now().date()
+    cur = 0
+    d = today
+    if d.strftime("%Y-%m-%d") not in active:
+        d -= timedelta(days=1)
+    while d.strftime("%Y-%m-%d") in active:
+        cur += 1
+        d -= timedelta(days=1)
+    best = 0
+    if active:
+        sdates = sorted(active)
+        run = best_run = 1
+        for i in range(1, len(sdates)):
+            prev = datetime.strptime(sdates[i-1], "%Y-%m-%d").date()
+            curd = datetime.strptime(sdates[i], "%Y-%m-%d").date()
+            run = run + 1 if (curd - prev).days == 1 else 1
+            best_run = max(best_run, run)
+        best = best_run
+
+    return {
+        "tasks_total": tasks_total,
+        "tasks_done": tasks_done,
+        "completion_rate": completion_rate,
+        "focus_minutes": focus_minutes,
+        "focus_sessions": total_sessions,
+        "quiz_attempts": quiz_attempts,
+        "quiz_best": quiz_best,
+        "quiz_avg": quiz_avg,
+        "quiz_categories": quiz_categories,
+        "plan_count": plan_count,
+        "subjects_count": len(subjects),
+        "energy_days": energy_days,
+        "energy_reports": total_reports,
+        "posts_count": posts_count,
+        "comments_count": comments_count,
+        "feedback_count": feedback_count,
+        "streak": cur,
+        "best_streak": best,
+        "active_days": len(active),
+        "member_since": (user.created_at or datetime.now()).strftime("%d %b %Y") if user.created_at else "Today",
+    }
 
 @app.route("/profile", methods=["POST"])
 @login_required
@@ -3799,36 +3765,13 @@ def forgot_password_post():
     user.password_reset_token = token
     user.password_reset_expires = datetime.utcnow() + timedelta(minutes=30)
     db.session.commit()
-    # Build a reset link from the current host
+    # Build a reset link from the current host.
+    # This keeps the flow 100% credential-free: no SMTP/app-password needed.
+    # In production you can later swap in a mail service by setting MAIL_* env vars.
     reset_link = url_for("reset_password", token=token, _external=True)
-    delivery = "demo"
-    try:
-        # Send reset email (works with Gmail SMTP if configured, else demo)
-        if os.environ.get("MAIL_EMAIL"):
-            import smtplib
-            from email.mime.text import MIMEText
-            from email.mime.multipart import MIMEMultipart
-            sender = os.environ.get("MAIL_EMAIL")
-            body = f"Hello {user.username},\n\nReset your Synora password using this link (valid 30 min):\n{reset_link}\n\nIf you didn't request this, ignore this email."
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = "Reset your Synora password"
-            msg["From"] = f"Synora AI <{sender}>"
-            msg["To"] = email
-            msg.attach(MIMEText(body, "plain"))
-            server = smtplib.SMTP(os.environ.get("MAIL_SMTP", "smtp.gmail.com"), int(os.environ.get("MAIL_PORT", "587")))
-            server.ehlo(); server.starttls(); server.ehlo()
-            server.login(sender, os.environ.get("MAIL_PASSWORD", ""))
-            server.sendmail(sender, [email], msg.as_string())
-            server.quit()
-            delivery = "sent"
-        else:
-            delivery = "demo"
-    except Exception as e:
-        print(f"[RESET-EMAIL] failed: {e}")
-        delivery = "demo"
-    print(f"[RESET] {email} token={token} delivery={delivery}")
-    return render_template("forgot_password_done.html", email=email, sent=(delivery == "sent"),
-                           demo_link=reset_link if delivery == "demo" else None)
+    print(f"[RESET] {email} token={token}")
+    return render_template("forgot_password_done.html", email=email, sent=False,
+                           demo_link=reset_link)
 
 
 # ---------------------------------------------------------------------------

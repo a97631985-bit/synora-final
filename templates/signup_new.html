@@ -10,7 +10,6 @@
   @keyframes slideUp { from{opacity:0;transform:translateY(20px)} to{opacity:1;transform:translateY(0)} }
   @keyframes slideRight { from{opacity:0;transform:translateX(-20px)} to{opacity:1;transform:translateX(0)} }
   @keyframes gradientShift { 0%{background-position:0% 50%} 50%{background-position:100% 50%} 100%{background-position:0% 50%} }
-  @keyframes checkPop { 0%{transform:scale(0)} 50%{transform:scale(1.2)} 100%{transform:scale(1)} }
   @keyframes shimmer { 0%{background-position:-200% 0} 100%{background-position:200% 0} }
   @keyframes fadeIn { from{opacity:0} to{opacity:1} }
 
@@ -125,30 +124,6 @@
   .input-wrap input::placeholder { color:#404943; }
   .input-wrap select option { background:#191c1d; color:#e1e3e4; }
 
-  .otp-row { display:flex; gap:8px; margin-top:8px; }
-  .otp-row input { flex:1; }
-  .otp-badge {
-    display:none; align-items:center; gap:4px; padding:8px 14px; border-radius:10px;
-    background:rgba(154,211,182,0.08); border:1px solid rgba(154,211,182,0.2);
-    color:#9ad3b6; font-size:0.75rem; font-weight:600;
-    animation: checkPop 0.4s cubic-bezier(0.4,0,0.2,1);
-  }
-  .otp-badge.show { display:inline-flex; }
-
-  .btn-otp {
-    padding:10px 18px; border-radius:12px; font-size:0.75rem; font-weight:700;
-    background:rgba(76,215,246,0.1); border:1px solid rgba(76,215,246,0.25);
-    color:#4cd7f6; cursor:pointer; transition:all 0.3s; white-space:nowrap;
-  }
-  .btn-otp:hover { background:rgba(76,215,246,0.2); transform:translateY(-1px); }
-
-  .btn-verify {
-    padding:10px 18px; border-radius:12px; font-size:0.75rem; font-weight:700;
-    background:linear-gradient(135deg, #9ad3b6, #4cd7f6); color:#003825;
-    border:none; cursor:pointer; transition:all 0.3s; white-space:nowrap;
-  }
-  .btn-verify:hover { transform:translateY(-1px); box-shadow:0 4px 15px rgba(154,211,182,0.3); }
-
   .btn-primary {
     width:100%; padding:14px; border-radius:14px; border:none; cursor:pointer;
     font-size:0.9rem; font-weight:700; font-family:inherit;
@@ -164,15 +139,6 @@
   }
   .btn-primary span { position:relative; z-index:1; }
 
-  .btn-google {
-    width:100%; padding:13px; border-radius:14px; border:1.5px solid rgba(255,255,255,0.1);
-    background:rgba(255,255,255,0.04); cursor:pointer; font-size:0.85rem; font-weight:600;
-    font-family:inherit; color:#e1e3e4; display:flex; align-items:center;
-    justify-content:center; gap:10px; transition:all 0.3s;
-  }
-  .btn-google:hover { background:rgba(255,255,255,0.08); border-color:rgba(255,255,255,0.15); transform:translateY(-1px); }
-  .btn-google svg { width:20px; height:20px; }
-
   .btn-skip {
     flex:1; padding:12px; border-radius:14px; border:1.5px solid rgba(255,255,255,0.08);
     background:transparent; cursor:pointer; font-size:0.8rem; font-weight:600;
@@ -180,10 +146,6 @@
     text-decoration:none; display:flex; align-items:center; justify-content:center;
   }
   .btn-skip:hover { background:rgba(255,255,255,0.04); border-color:rgba(255,255,255,0.12); color:#c0c9c2; }
-
-  .divider { display:flex; align-items:center; gap:12px; margin:1.25rem 0; }
-  .divider::before, .divider::after { content:''; flex:1; height:1px; background:rgba(255,255,255,0.06); }
-  .divider span { font-size:0.7rem; color:#404943; text-transform:uppercase; letter-spacing:0.1em; font-weight:600; }
 
   .step-section { animation: fadeIn 0.4s ease-out; }
   .password-strength {
@@ -270,12 +232,7 @@
                 <span class="icon"><span class="material-symbols-outlined">mail</span></span>
                 <input name="email" id="emailInput" type="email" required placeholder="aarav@email.com" autocomplete="email">
               </div>
-              <div class="otp-row">
-                <button type="button" onclick="sendOtp('email')" id="emailOtpBtn" class="btn-otp">Send OTP</button>
-                <input id="emailOtp" placeholder="Enter 6-digit OTP" maxlength="6" class="input-glass" style="border-radius:12px; padding:10px 14px; font-size:0.85rem; display:none; flex:1; background:rgba(12,15,16,0.8); border:1.5px solid rgba(138,147,140,0.2); color:#e1e3e4">
-                <button type="button" onclick="verifyOtp('email')" id="emailVerifyBtn" class="btn-verify" style="display:none">Verify</button>
-                <span id="emailBadge" class="otp-badge"><span class="material-symbols-outlined" style="font-size:16px">verified</span> Verified</span>
-              </div>
+              <div style="font-size:0.7rem; color:#404943; margin-top:6px; padding-left:2px">No OTP needed — your email is verified right here.</div>
             </div>
 
             <div class="input-group">
@@ -284,12 +241,7 @@
                 <span class="icon"><span class="material-symbols-outlined">call</span></span>
                 <input name="phone" id="phoneInput" placeholder="+91 98765 43210" autocomplete="tel">
               </div>
-              <div class="otp-row">
-                <button type="button" onclick="sendOtp('phone')" id="phoneOtpBtn" class="btn-otp">Send OTP</button>
-                <input id="phoneOtp" placeholder="OTP" maxlength="6" class="input-glass" style="border-radius:12px; padding:10px 14px; font-size:0.85rem; display:none; flex:1; background:rgba(12,15,16,0.8); border:1.5px solid rgba(138,147,140,0.2); color:#e1e3e4">
-                <button type="button" onclick="verifyOtp('phone')" id="phoneVerifyBtn" class="btn-verify" style="display:none">Verify</button>
-                <span id="phoneBadge" class="otp-badge"><span class="material-symbols-outlined" style="font-size:16px">verified</span> Verified</span>
-              </div>
+              <div style="font-size:0.7rem; color:#404943; margin-top:6px; padding-left:2px">We only use this if you choose to log in by phone later.</div>
             </div>
 
             <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px">
@@ -374,7 +326,7 @@
                 <div class="input-wrap">
                   <span class="icon"><span class="material-symbols-outlined">timer</span></span>
                   <select name="daily_hours">
-                    <option value="3">3 hours</option><option value="4">4 hours</option>
+                    <option value="">Select</option><option value="3">3 hours</option><option value="4">4 hours</option>
                     <option value="6" selected>6 hours</option><option value="8">8 hours</option><option value="10">10+ hours</option>
                   </select>
                 </div>
@@ -383,7 +335,7 @@
 
             <label style="display:flex; align-items:flex-start; gap:8px; margin:1rem 0; cursor:pointer; font-size:0.78rem; color:#8a938c">
               <input type="checkbox" required style="margin-top:2px; accent-color:#9ad3b6">
-              I agree to <a href="#" style="color:#9ad3b6; text-decoration:underline">Terms</a> & <a href="#" style="color:#9ad3b6; text-decoration:underline">Privacy Policy</a>
+              I agree to <a href="/terms" style="color:#9ad3b6; text-decoration:underline">Terms</a> & <a href="/privacy" style="color:#9ad3b6; text-decoration:underline">Privacy Policy</a>
             </label>
 
             <div style="display:flex; gap:10px">
@@ -396,13 +348,6 @@
             </div>
           </div>
         </form>
-
-        <div class="divider"><span>or</span></div>
-
-        <button onclick="googleSignup()" type="button" class="btn-google" id="googleBtn">
-          <svg viewBox="0 0 24 24"><path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/><path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/><path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/><path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/></svg>
-          <span id="googleBtnText">Continue with Google</span>
-        </button>
 
         <p style="text-align:center; margin-top:1.25rem; font-size:0.82rem; color:#8a938c">
           Already have an account? <a href="/login" style="color:#9ad3b6; font-weight:700; text-decoration:none">Log in</a>
@@ -428,60 +373,6 @@ function goStep(n){
   window.scrollTo({top:0, behavior:'smooth'});
 }
 
-async function sendOtp(kind){
-  const val = (kind==='email' ? document.getElementById('emailInput') : document.getElementById('phoneInput')).value.trim();
-  if(!val) return;
-  const btn = document.getElementById(kind+'OtpBtn');
-  btn.textContent = 'Sending...'; btn.disabled = true;
-  const r = await fetch('/auth/send-otp', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({kind, target: val})});
-  const d = await r.json();
-  if(d.ok){
-    btn.textContent = 'Resend'; btn.disabled = false;
-    document.getElementById(kind+'Otp').style.display = 'flex';
-    document.getElementById(kind+'VerifyBtn').style.display = 'block';
-    showOtpPopup(kind, val, d);
-  } else { btn.textContent = 'Retry'; btn.disabled = false; alert(d.error||'Failed'); }
-}
-
-function showOtpPopup(kind, target, data){
-  const isDemo = data.delivery === 'demo' && data.otp;
-  document.getElementById('otpModalTitle').textContent = 'OTP Sent';
-  if(kind === 'email'){
-    document.getElementById('otpModalBody').innerHTML =
-      'A 6-digit verification code has been sent to your email:<br><strong style="color:#9ad3b6">' + target + '</strong>';
-  } else {
-    document.getElementById('otpModalBody').innerHTML =
-      'An SMS with your 6-digit code has been sent to:<br><strong style="color:#9ad3b6">' + target + '</strong>';
-  }
-  const demoBox = document.getElementById('otpDemoBox');
-  if(isDemo){
-    demoBox.style.display = 'block';
-    // OTP can arrive via gmail; show code live if demo
-    document.getElementById('otpDemoCode').textContent = data.otp;
-  } else {
-    demoBox.style.display = 'none';
-  }
-  document.getElementById('otpModalOverlay').classList.add('open');
-  // Focus OTP input
-  setTimeout(()=>{ const inp = document.getElementById(kind==='email'?'emailOtp':'phoneOtp'); if(inp){ inp.focus(); } }, 100);
-}
-
-function closeOtpPopup(){ document.getElementById('otpModalOverlay').classList.remove('open'); }
-
-
-async function verifyOtp(kind){
-  const otp = document.getElementById(kind+'Otp').value.trim();
-  const target = (kind==='email' ? document.getElementById('emailInput') : document.getElementById('phoneInput')).value.trim();
-  const r = await fetch('/auth/verify-otp', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({kind, target, otp})});
-  const d = await r.json();
-  if(d.ok){
-    document.getElementById(kind+'Badge').classList.add('show');
-    document.getElementById(kind+'Otp').style.display='none';
-    document.getElementById(kind+'VerifyBtn').style.display='none';
-    document.getElementById(kind+'OtpBtn').style.display='none';
-  } else alert(d.error||'Wrong OTP');
-}
-
 document.getElementById('passwordInput').addEventListener('input', function(){
   const v = this.value; let s = 0;
   if(v.length >= 6) s++; if(v.length >= 10) s++;
@@ -489,102 +380,5 @@ document.getElementById('passwordInput').addEventListener('input', function(){
   const bars = document.querySelectorAll('#pwdStrength .bar');
   bars.forEach((b,i) => { b.className = 'bar' + (i < s ? (s<=1?' active weak':s<=2?' active medium':' active') : ''); });
 });
-
-async function googleSignup(){
-  // Demo flow using Google Identity Services token (auto-detects signed-in account)
-  try {
-    google.accounts.id.initialize({
-      client_id: "YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com",
-      callback: (resp) => {
-        if(resp.credential){
-          // Decode the Google JWT ID token payload to get profile
-          const parts = resp.credential.split('.');
-          if(parts.length >= 2){
-            try {
-              const payload = JSON.parse(atob(parts[1].replace(/-/g,'+').replace(/_/g,'/')));
-              finishGoogleLogin(payload.email, payload.name || '', payload.picture || '');
-            } catch(e){ alert('Google auto-detect: profile parse failed'); }
-          }
-        }
-      }
-    });
-    google.accounts.id.prompt();
-  } catch(e){
-    // Google Identity Services not loaded / no client id -> fallback to demo account chooser
-    googleDemo();
-  }
-}
-
-function googleDemo(){
-  // Real browsers: if you're logged into Google, this list auto-populates.
-  // For the demo, we show the signed-in account from the browser automatically
-  // or ask for email if Google ID could not be auto-detected.
-  const seen = localStorage.getItem('synora_google_email');
-  let email = seen || '';
-  if(window.chrome && window.chrome.getProfiles !== undefined){
-    // Chrome can list signed-in accounts
-    try {
-      window.chrome.getProfiles(function(profiles){
-        if(profiles && profiles.length){
-          // best effort — browsers may not expose email this way
-        }
-      });
-    } catch(e){}
-  }
-  email = prompt('Demo Google — apna Gmail daalo (browser ke account se liya jata hai production me):', email || '');
-  if(!email) return;
-  localStorage.setItem('synora_google_email', email);
-  finishGoogleLogin(email.trim());
-}
-
-async function finishGoogleLogin(email, name, picture){
-  const btnText = document.getElementById('googleBtnText');
-  btnText.textContent = 'Signing in...';
-  const r = await fetch('/auth/google', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({email, name, picture})});
-  const d = await r.json();
-  if(d.ok) window.location.href='/dashboard'; else { btnText.textContent='Continue with Google'; alert(d.error); }
-}
 </script>
-<script src="https://accounts.google.com/gsi/client" async defer></script>
-
-<!-- OTP Sent Modal -->
-<div id="otpModalOverlay" class="otp-overlay">
-  <div class="otp-modal">
-    <div class="otp-close" onclick="closeOtpPopup()">&times;</div>
-    <div class="otp-icon"><span class="material-symbols-outlined" style="font-size:42px">mark_email_read</span></div>
-    <h3 id="otpModalTitle">OTP Sent</h3>
-    <p id="otpModalBody" style="color:#8a938c; font-size:0.85rem; line-height:1.6; margin-top:8px"></p>
-    <div id="otpDemoBox" style="display:none; margin-top:14px; background:rgba(76,215,246,0.06); border:1px dashed rgba(76,215,246,0.3); border-radius:12px; padding:12px; text-align:center">
-      <div style="font-size:0.7rem; color:#8a938c; text-transform:uppercase; letter-spacing:0.08em">Demo mode — your code</div>
-      <div id="otpDemoCode" style="font-size:2rem; font-weight:800; color:#4cd7f6; letter-spacing:0.3em; margin-top:4px"></div>
-      <div style="font-size:0.7rem; color:#8a938c; margin-top:6px">(Production me ye email/SMS me jaata hai)</div>
-    </div>
-    <button class="btn-verify" onclick="closeOtpPopup()" style="width:100%; margin-top:18px">Got it</button>
-  </div>
-</div>
-
-<style>
-  .otp-overlay {
-    position:fixed; inset:0; background:rgba(0,0,0,0.6); backdrop-filter:blur(4px);
-    display:none; align-items:center; justify-content:center; z-index:999; padding:1rem;
-  }
-  .otp-overlay.open { display:flex; }
-  .otp-modal {
-    background:#1d2021; border:1px solid rgba(255,255,255,0.08); border-radius:20px;
-    padding:2.2rem 2rem 1.5rem; max-width:360px; width:100%; position:relative; text-align:center;
-    animation: slideUp 0.4s cubic-bezier(0.4,0,0.2,1);
-    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-  }
-  .otp-close {
-    position:absolute; top:12px; right:16px; font-size:1.6rem; color:#8a938c; cursor:pointer; line-height:1;
-  }
-  .otp-close:hover { color:#e1e3e4; }
-  .otp-icon {
-    width:72px; height:72px; border-radius:50%; margin:0 auto 14px;
-    background:linear-gradient(135deg, rgba(154,211,182,0.15), rgba(76,215,246,0.1));
-    display:flex; align-items:center; justify-content:center; color:#9ad3b6;
-    border:1px solid rgba(154,211,182,0.2);
-  }
-  .otp-modal h3 { font-size:1.2rem; font-weight:800; }
-</style>
 </body></html>

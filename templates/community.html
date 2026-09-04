@@ -48,17 +48,19 @@
                   <option value="motivation">⚡ Motivation</option>
                   <option value="general">💬 General</option>
                 </select>
-                <div id="mediaPreview" class="hidden space-y-2"></div>
+                <div id="mediaPreview" class="hidden flex flex-wrap gap-2"></div>
                 <div class="flex items-center justify-between pt-2 border-t border-white/5 flex-wrap gap-2">
-                  <div class="flex gap-2">
+                  <div class="flex gap-2 items-center flex-wrap">
                     <button type="button" id="addImageBtn" class="btn-ghost text-sm" aria-label="Add image"><span class="material-symbols-outlined align-middle mr-1">add_photo_alternate</span> Image</button>
                     <button type="button" id="addVideoBtn" class="btn-ghost text-sm" aria-label="Add video"><span class="material-symbols-outlined align-middle mr-1">videocam</span> Video</button>
+                    <button type="button" id="addLinkBtn" class="btn-ghost text-sm" aria-label="Paste a media link"><span class="material-symbols-outlined align-middle mr-1">link</span> Link</button>
                   </div>
                   <div class="flex gap-2">
                     <button type="button" id="cancelPostBtn" class="btn-ghost text-sm">Cancel</button>
                     <button type="button" id="submitPostBtn" class="btn-primary text-sm" disabled><span class="material-symbols-outlined align-middle mr-1">send</span> Post</button>
                   </div>
                 </div>
+                <p class="text-xs text-on-surface-variant drop-hint">Drag & drop images or videos here to attach them — or tap Image / Video to upload from your device.</p>
               </div>
             </div>
           </div>
@@ -158,11 +160,13 @@
         <option value="motivation">⚡ Motivation</option>
         <option value="general">💬 General</option>
       </select>
-      <div id="modalMediaPreview" class="hidden space-y-2"></div>
+      <div id="modalMediaPreview" class="hidden flex flex-wrap gap-2"></div>
       <div class="flex gap-2">
         <button type="button" id="modalAddImageBtn" class="btn-ghost flex-1"><span class="material-symbols-outlined mr-1">add_photo_alternate</span> Image</button>
         <button type="button" id="modalAddVideoBtn" class="btn-ghost flex-1"><span class="material-symbols-outlined mr-1">videocam</span> Video</button>
+        <button type="button" id="modalAddLinkBtn" class="btn-ghost flex-1"><span class="material-symbols-outlined mr-1">link</span> Link</button>
       </div>
+      <p class="text-xs text-on-surface-variant text-center drop-hint">Drag & drop media here, or tap Image / Video to upload (videos up to 5MB).</p>
       <div class="flex gap-2 pt-2 border-t border-white/5">
         <button type="button" id="modalCancelBtn" class="btn-ghost flex-1">Cancel</button>
         <button type="button" id="modalSubmitBtn" class="btn-primary flex-1" disabled><span class="material-symbols-outlined mr-1">send</span> Post</button>
@@ -339,39 +343,145 @@ modalCancel.onclick = closeModalFn;
 closeModal.onclick = closeModalFn;
 modal.onclick = e => { if (e.target === modal) closeModalFn(); };
 
+function refreshPreviews() {
+  renderMediaPreview();
+  renderModalMediaPreview();
+  updateSubmitState();
+}
+function mediaThumb(m) {
+  return m.type === 'image'
+    ? `<img src="${escapeHtml(m.url)}" class="rounded-xl max-h-48 w-auto">`
+    : `<video src="${escapeHtml(m.url)}" class="rounded-xl max-h-48 w-auto" preload="metadata" controls></video>`;
+}
 function renderMediaPreview() {
   mediaPreview.innerHTML = pendingMedia.map((m, i) => `
     <div class="relative group">
-      ${m.type === 'image' ? `<img src="${escapeHtml(m.url)}" class="rounded-xl max-h-48 w-auto">` : `<video src="${escapeHtml(m.url)}" class="rounded-xl max-h-48 w-auto" controls></video>`}
-      <button type="button" data-idx="${i}" class="remove-media absolute top-2 right-2 p-1 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"><span class="material-symbols-outlined">close</span></button>
+      ${mediaThumb(m)}
+      <button type="button" data-idx="${i}" class="remove-media absolute top-2 right-2 p-1 rounded-full bg-black/60 text-white opacity-80 hover:opacity-100 transition-opacity"><span class="material-symbols-outlined">close</span></button>
+      ${m.type === 'video' ? '<span class="absolute bottom-2 left-2 px-1.5 py-0.5 rounded bg-black/70 text-white text-[10px]">VIDEO</span>' : ''}
     </div>
   `).join('');
   mediaPreview.classList.toggle('hidden', pendingMedia.length === 0);
-  mediaPreview.querySelectorAll('.remove-media').forEach(b => b.onclick = () => { pendingMedia.splice(+b.dataset.idx, 1); renderMediaPreview(); renderModalMediaPreview(); updateSubmitState(); });
+  mediaPreview.querySelectorAll('.remove-media').forEach(b => b.onclick = () => { pendingMedia.splice(+b.dataset.idx, 1); refreshPreviews(); });
 }
 function renderModalMediaPreview() {
   modalMediaPreview.innerHTML = pendingMedia.map((m, i) => `
     <div class="relative group">
-      ${m.type === 'image' ? `<img src="${escapeHtml(m.url)}" class="rounded-xl max-h-48 w-auto">` : `<video src="${escapeHtml(m.url)}" class="rounded-xl max-h-48 w-auto" controls></video>`}
-      <button type="button" data-idx="${i}" class="remove-media absolute top-2 right-2 p-1 rounded-full bg-black/60 text-white opacity-0 group-hover:opacity-100 transition-opacity"><span class="material-symbols-outlined">close</span></button>
+      ${mediaThumb(m)}
+      <button type="button" data-idx="${i}" class="remove-media absolute top-2 right-2 p-1 rounded-full bg-black/60 text-white opacity-80 hover:opacity-100 transition-opacity"><span class="material-symbols-outlined">close</span></button>
     </div>
   `).join('');
   modalMediaPreview.classList.toggle('hidden', pendingMedia.length === 0);
-  modalMediaPreview.querySelectorAll('.remove-media').forEach(b => b.onclick = () => { pendingMedia.splice(+b.dataset.idx, 1); renderMediaPreview(); renderModalMediaPreview(); updateSubmitState(); });
+  modalMediaPreview.querySelectorAll('.remove-media').forEach(b => b.onclick = () => { pendingMedia.splice(+b.dataset.idx, 1); refreshPreviews(); });
 }
-function addMedia(type) {
-  const url = prompt(`Paste ${type} URL (direct link to image/video):`);
-  if (url && url.trim()) {
-    pendingMedia.push({type, url: url.trim()});
-    renderMediaPreview();
-    renderModalMediaPreview();
-    updateSubmitState();
+
+// ---------- Media upload (real file picker + drag & drop) ----------
+const mediaFileInput = $('#mediaFileInput');
+const MAX_VIDEO_BYTES = 5 * 1024 * 1024; // 5MB, fits the 16MB Flask request cap as base64
+function pickFiles(type) {
+  mediaFileInput.accept = type === 'image' ? 'image/*' : 'video/*';
+  mediaFileInput.value = '';
+  mediaFileInput.click();
+}
+mediaFileInput.addEventListener('change', () => handleFiles([...(mediaFileInput.files || [])]));
+
+function addLink(type) {
+  const url = prompt(`Paste ${type} URL (direct link to an image or video):`);
+  if (!url || !String(url).trim()) return;
+  const trimmed = String(url).trim();
+  if (!trimmed.startsWith('https://') && !trimmed.startsWith('data:')) {
+    alert('Only https:// links or media from your device are allowed.');
+    return;
   }
+  pendingMedia.push({type, url: trimmed});
+  refreshPreviews();
 }
-addImageBtn.onclick = () => addMedia('image');
-addVideoBtn.onclick = () => addMedia('video');
-modalAddImage.onclick = () => addMedia('image');
-modalAddVideo.onclick = () => addMedia('video');
+$('#addLinkBtn').onclick = () => addLink('image');
+const modalAddLink = $('#modalAddLinkBtn');
+modalAddLink.onclick = () => addLink('image');
+
+addImageBtn.onclick = () => pickFiles('image');
+addVideoBtn.onclick = () => pickFiles('video');
+modalAddImage.onclick = () => pickFiles('image');
+modalAddVideo.onclick = () => pickFiles('video');
+
+function handleFiles(files) {
+  if (!files || !files.length) return;
+  (async () => {
+    for (const f of files) {
+      if (f.type.startsWith('image/')) await addImageFile(f);
+      else if (f.type.startsWith('video/')) await addVideoFile(f);
+      else alert(`Skipping "${f.name}" — only images and videos are supported.`);
+    }
+  })();
+}
+
+// Client-side image compression: resizes to ≤1400px and encodes to JPEG.
+function compressImage(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1400;
+        let {width, height} = img;
+        const scale = Math.min(1, MAX / Math.max(width, height));
+        width = Math.max(1, Math.round(width * scale));
+        height = Math.max(1, Math.round(height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = width; canvas.height = height;
+        canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+        let q = 0.85;
+        let url = canvas.toDataURL('image/jpeg', q);
+        while (url.length > 1800000 && q > 0.55) { q -= 0.1; url = canvas.toDataURL('image/jpeg', q); }
+        if (url.length > 1950000) { alert('That image is still too large after compression — try a smaller photo.'); reject(new Error('too large')); }
+        else resolve(url);
+      };
+      img.onerror = () => reject(new Error('decode failed'));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error('read failed'));
+    reader.readAsDataURL(file);
+  });
+}
+async function addImageFile(file) {
+  try {
+    const dataUrl = await compressImage(file);
+    pendingMedia.push({type: 'image', url: dataUrl});
+    refreshPreviews();
+  } catch (e) { console.error(file.name, e); }
+}
+async function addVideoFile(file) {
+  if (file.size > MAX_VIDEO_BYTES) {
+    alert(`Video is ${(file.size / (1024*1024)).toFixed(1)}MB — the free plan allows up to 5MB. Pick a shorter clip.`);
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => { pendingMedia.push({type: 'video', url: reader.result}); refreshPreviews(); };
+  reader.onerror = () => alert(`Could not read ${file.name}`);
+  reader.readAsDataURL(file);
+}
+
+// Drag & drop support on both composers
+function setupDropZone(zone) {
+  if (!zone) return;
+  ['dragenter', 'dragover'].forEach(ev => zone.addEventListener(ev, e => {
+    e.preventDefault(); e.stopPropagation(); zone.classList.add('drop-active');
+  }));
+  zone.addEventListener('dragleave', e => {
+    e.preventDefault(); e.stopPropagation();
+    if (e.target === zone) zone.classList.remove('drop-active');
+  });
+  zone.addEventListener('drop', e => {
+    e.preventDefault(); e.stopPropagation();
+    zone.classList.remove('drop-active');
+    const files = e.dataTransfer && e.dataTransfer.files;
+    if (files && files.length) { mediaFileInput.accept = ''; handleFiles([...files]); }
+  });
+}
+setupDropZone($('#createPostExpanded'));
+setupDropZone(modal);
+document.querySelectorAll('.glass-panel').forEach(p => { if (p.querySelector('#modalPostContent')) setupDropZone(p); });
 
 function updateSubmitState() {
   const hasContent = (contentEl.value.trim() || modalContent.value.trim()) || pendingMedia.length > 0;
@@ -420,8 +530,9 @@ function renderPost(post) {
   const canDelete = isAuthor || isAdmin;
   const cat = CATEGORY_META[post.category] || CATEGORY_META.general;
   const mediaHtml = (post.media_urls || []).map(m =>
-    m.type === 'image' ? `<img src="${escapeHtml(m.url)}" class="rounded-xl max-h-64 w-auto my-2 cursor-zoom-in" loading="lazy" onclick="this.requestFullscreen?.()">`
-    : `<video src="${escapeHtml(m.url)}" class="rounded-xl max-h-64 w-auto my-2" controls></video>`
+    m.type === 'image'
+      ? `<img src="${escapeHtml(m.url)}" data-src="${escapeHtml(m.url)}" class="lightboxable rounded-xl max-h-72 w-auto my-2 cursor-zoom-in" loading="lazy" alt="Posted image">`
+      : `<video src="${escapeHtml(m.url)}" class="rounded-xl max-h-72 w-auto my-2" preload="metadata" controls></video>`
   ).join('');
 
   return `
@@ -486,7 +597,9 @@ function renderComments(comments) {
             <span class="text-on-surface-variant text-xs">${timeAgo(c.created_at)}</span>
           </div>
           <p class="text-sm mt-1 whitespace-pre-wrap">${nl2br(c.content)}</p>
-          ${(c.media_urls || []).map(m => m.type === 'image' ? `<img src="${escapeHtml(m.url)}" class="rounded-lg max-h-32 w-auto mt-1">` : `<video src="${escapeHtml(m.url)}" class="rounded-lg max-h-32 w-auto mt-1" controls></video>`).join('')}
+          ${(c.media_urls || []).map(m => m.type === 'image'
+      ? `<img src="${escapeHtml(m.url)}" data-src="${escapeHtml(m.url)}" class="lightboxable rounded-lg max-h-32 w-auto mt-1 cursor-zoom-in" alt="Comment image">`
+      : `<video src="${escapeHtml(m.url)}" class="rounded-lg max-h-32 w-auto mt-1" preload="metadata" controls></video>`).join('')}
           <div class="flex items-center gap-3 mt-2">
             <button class="like-comment-btn flex items-center gap-1 text-on-surface-variant hover:text-primary text-xs ${c.liked_by_current ? 'text-primary' : ''}" data-id="${c.id}" aria-pressed="${c.liked_by_current}">
               <span class="material-symbols-outlined">${c.liked_by_current ? 'favorite' : 'favorite_border'}</span>
@@ -780,6 +893,45 @@ fbSubmitBtn.onclick = async () => {
   finally { fbSubmitBtn.disabled = false; }
 };
 
+// ---------- Lightbox (click any feed/comment image) ----------
+const lbBox = $('#lightbox');
+const lbImg = $('#lightboxImg');
+const lbCaption = $('#lightboxCaption');
+let lbItems = [], lbIndex = 0;
+function openLightbox(src) {
+  lbItems = $all('.lightboxable').map(el => ({src: el.dataset.src || el.src, alt: el.alt || ''}));
+  if (!lbItems.length) return;
+  const idx = lbItems.findIndex(x => x.src === src);
+  showLightbox(idx >= 0 ? idx : 0);
+}
+function showLightbox(i) {
+  lbIndex = (i + lbItems.length) % lbItems.length;
+  lbImg.src = lbItems[lbIndex].src;
+  lbImg.alt = lbItems[lbIndex].alt;
+  lbCaption.textContent = `${lbIndex + 1} / ${lbItems.length}`;
+  lbBox.classList.remove('hidden');
+  lbBox.classList.add('flex');
+  document.body.style.overflow = 'hidden';
+}
+function lbStep(dir) { showLightbox(lbIndex + dir); }
+function closeLightbox() {
+  lbBox.classList.add('hidden');
+  lbBox.classList.remove('flex');
+  document.body.style.overflow = '';
+  lbImg.src = '';
+}
+lbBox.onclick = e => { if (e.target === lbBox) closeLightbox(); };
+document.addEventListener('keydown', e => {
+  if (lbBox.classList.contains('hidden')) return;
+  if (e.key === 'Escape') closeLightbox();
+  else if (e.key === 'ArrowLeft') lbStep(-1);
+  else if (e.key === 'ArrowRight') lbStep(1);
+});
+document.addEventListener('click', e => {
+  const img = e.target.closest && e.target.closest('.lightboxable');
+  if (img) openLightbox(img.dataset.src || img.src);
+});
+
 // ---------- Init ----------
 window.currentUserId = parseInt('{{ session.get("user_id", 0) }}') || null;
 window.currentUsername = '{{ session.username or "" }}';
@@ -804,7 +956,23 @@ input[type="text"].comment-input::placeholder { color: #8a938c; }
 .seg-toggle { }
 .seg-on { background:#9ad3b6; color:#003825; font-weight:700; }
 #leaderboard::-webkit-scrollbar { width:0; }
+.drop-active { border:2px dashed #9ad3b6 !important; background:rgba(154,211,182,0.06) !important; }
+@keyframes lbIn { from {opacity:0; transform:scale(0.96)} to {opacity:1; transform:scale(1)} }
 </style>
   </main>
+</div>
+
+<!-- Shared file input for media uploads (both composers) -->
+<input type="file" id="mediaFileInput" class="hidden" accept="image/*,video/*" multiple>
+
+<!-- Lightbox for viewing community media -->
+<div id="lightbox" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/85 backdrop-blur-sm">
+  <button type="button" class="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10" onclick="closeLightbox()" aria-label="Close"><span class="material-symbols-outlined">close</span></button>
+  <button type="button" class="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10" onclick="lbStep(-1)" aria-label="Previous"><span class="material-symbols-outlined">chevron_left</span></button>
+  <button type="button" class="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10" onclick="lbStep(1)" aria-label="Next"><span class="material-symbols-outlined">chevron_right</span></button>
+  <div class="max-h-[90vh] max-w-[90vw] px-12 py-4">
+    <img id="lightboxImg" src="" alt="" class="max-h-[80vh] max-w-full rounded-xl object-contain shadow-2xl mx-auto" style="animation: lbIn .25s ease">
+    <div id="lightboxCaption" class="text-center text-on-surface-variant text-sm mt-3"></div>
+  </div>
 </div>
 </body></html>
