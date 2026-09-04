@@ -28,6 +28,10 @@ services:
         sync: false
       - key: ADMIN_KEY
         value: synora-admin-2026
+      # Account that acts as community admin/dev (gets verified badge + can moderate
+      # reported posts and update feedback status).
+      - key: ADMIN_EMAIL
+        value: admin@synora.app
       - key: PYTHON_VERSION
         value: "3.11"
       # Optional: tune auth rate limiting (requests per 60s window per IP)

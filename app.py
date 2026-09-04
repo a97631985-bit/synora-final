@@ -20,6 +20,7 @@ except ImportError:
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.ext.mutable import MutableList, MutableDict
+from sqlalchemy import func, distinct
 from werkzeug.security import generate_password_hash, check_password_hash
 
 app = Flask(__name__)
@@ -297,10 +298,12 @@ class CommunityPost(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
     content = db.Column(db.Text, nullable=False)
     media_urls = db.Column(db.JSON, default=list)  # list of {type: "image"|"video", url: "..."}
+    category = db.Column(db.String(30), default="general", index=True)  # progress/question/buddy/tips/motivation/general
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     is_pinned = db.Column(db.Boolean, default=False)
     is_deleted = db.Column(db.Boolean, default=False)
+    report_count = db.Column(db.Integer, default=0, nullable=False)
 
     # Relationships
     author = db.relationship("User", backref=db.backref("posts", lazy=True))
@@ -317,6 +320,7 @@ class CommunityPost(db.Model):
             "author": {"id": self.author.id, "username": self.author.username, "photo_url": self.author.photo_url} if self.author else None,
             "content": self.content,
             "media_urls": self.media_urls or [],
+            "category": self.category or "general",
             "created_at": self.created_at.isoformat() if self.created_at else None,
             "updated_at": self.updated_at.isoformat() if self.updated_at else None,
             "is_pinned": self.is_pinned,
@@ -378,6 +382,47 @@ class CommunityCommentLike(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     __table_args__ = (db.UniqueConstraint("comment_id", "user_id", name="uq_comment_user_like"),)
+
+
+class FeedbackItem(db.Model):
+    """Feature requests, bug reports & general feedback from users."""
+    __tablename__ = "feedback_items"
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    category = db.Column(db.String(30), default="general", index=True)  # feature/bug/feedback/question
+    title = db.Column(db.String(200), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), default="new", index=True)  # new/acknowledged/building/shipped/closed
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    author = db.relationship("User", backref=db.backref("feedback_items", lazy=True))
+    votes = db.relationship("FeedbackVote", backref="item", lazy=True, cascade="all, delete-orphan")
+
+    def to_dict(self, current_user_id=None):
+        voted_by_current = False
+        if current_user_id:
+            voted_by_current = any(v.user_id == current_user_id for v in self.votes)
+        return {
+            "id": self.id,
+            "author": {"id": self.author.id, "username": self.author.username} if self.author else None,
+            "category": self.category,
+            "title": self.title,
+            "content": self.content,
+            "status": self.status,
+            "vote_count": len(self.votes),
+            "voted_by_current": voted_by_current,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class FeedbackVote(db.Model):
+    __tablename__ = "feedback_votes"
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    feedback_id = db.Column(db.String(36), db.ForeignKey("feedback_items.id"), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    __table_args__ = (db.UniqueConstraint("feedback_id", "user_id", name="uq_feedback_user_vote"),)
 
 
 class Task(db.Model):
@@ -459,12 +504,16 @@ with app.app_context():
             print(f"[MIGRATE] added {table}.{column}")
 
     _ensure_column("users", "is_active", "ALTER TABLE users ADD COLUMN is_active BOOLEAN NOT NULL DEFAULT TRUE")
+    _ensure_column("community_posts", "category", "ALTER TABLE community_posts ADD COLUMN category VARCHAR(30) DEFAULT 'general'")
+    _ensure_column("community_posts", "report_count", "ALTER TABLE community_posts ADD COLUMN report_count INTEGER NOT NULL DEFAULT 0")
 
     # Backfill is_active = True for any existing rows that might be NULL
     from sqlalchemy import text as _t
     try:
         with db.engine.begin() as conn:
             conn.execute(_t("UPDATE users SET is_active = TRUE WHERE is_active IS NULL"))
+            conn.execute(_t("UPDATE community_posts SET category = 'general' WHERE category IS NULL OR category = ''"))
+            conn.execute(_t("UPDATE community_posts SET report_count = 0 WHERE report_count IS NULL"))
     except Exception as _e:
         print(f"[MIGRATE] backfill skipped: {_e}")
 
@@ -480,6 +529,18 @@ with app.app_context():
             print(f"[MIGRATE] created community tables: {missing}")
     except Exception as _e:
         print(f"[MIGRATE] community tables check skipped: {_e}")
+
+    # Ensure feedback tables exist
+    try:
+        insp = sa_inspect(db.engine)
+        existing_tables = set(insp.get_table_names())
+        feedback_tables = {"feedback_items", "feedback_votes"}
+        missing_fb = feedback_tables - existing_tables
+        if missing_fb:
+            db.create_all()
+            print(f"[MIGRATE] created feedback tables: {missing_fb}")
+    except Exception as _e:
+        print(f"[MIGRATE] feedback tables check skipped: {_e}")
 
 
 
@@ -1102,6 +1163,94 @@ def admin_export():
             "learning_data": u.learning_data, "created_at": u.created_at.isoformat() if u.created_at else None
         })
     return jsonify({"users": data, "count": len(data)})
+
+
+def _admin_key_ok():
+    key = request.args.get("key") or request.headers.get("X-Admin-Key")
+    return key == os.environ.get("ADMIN_KEY", "synora-admin-2026")
+
+
+@app.route("/admin/api/feedback", methods=["GET"])
+def admin_api_feedback():
+    """Admin: list all feedback/suggestions with user info + reported posts."""
+    if not _admin_key_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    cat = (request.args.get("category") or "").strip()
+    status = (request.args.get("status") or "").strip()
+    q = (request.args.get("q") or "").strip()
+
+    items_query = FeedbackItem.query
+    if cat:
+        items_query = items_query.filter_by(category=cat)
+    if status:
+        items_query = items_query.filter_by(status=status)
+    if q:
+        items_query = items_query.filter((FeedbackItem.title.ilike(f"%{q}%")) | (FeedbackItem.content.ilike(f"%{q}%")))
+    items = items_query.order_by(
+        db.case(
+            (FeedbackItem.status == "new", 0),
+            (FeedbackItem.status == "acknowledged", 1),
+            (FeedbackItem.status == "building", 2),
+            (FeedbackItem.status == "shipped", 3),
+            else_=4
+        ), FeedbackItem.created_at.desc()
+    ).limit(200).all()
+
+    reported_posts = CommunityPost.query.filter(CommunityPost.report_count > 0, CommunityPost.is_deleted.is_(False)).order_by(CommunityPost.report_count.desc()).limit(50).all()
+
+    return jsonify({
+        "items": [i.to_dict() for i in items],
+        "reported_posts": [{
+            "id": p.id,
+            "author": p.author.username if p.author else "?",
+            "content": p.content[:200],
+            "report_count": p.report_count,
+            "created_at": p.created_at.isoformat() if p.created_at else None,
+        } for p in reported_posts],
+    })
+
+
+@app.route("/admin/api/feedback/<item_id>/status", methods=["POST"])
+def admin_api_feedback_status(item_id):
+    if not _admin_key_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    item = db.session.get(FeedbackItem, item_id)
+    if not item:
+        return jsonify({"error": "Feedback not found"}), 404
+    data = request.get_json(silent=True) or {}
+    status = (data.get("status") or "").strip()
+    if status not in ("new", "acknowledged", "building", "shipped", "closed"):
+        return jsonify({"error": "Invalid status"}), 400
+    item.status = status
+    db.session.commit()
+    return jsonify({"ok": True, "item": item.to_dict()})
+
+
+@app.route("/admin/api/feedback/<item_id>", methods=["DELETE"])
+def admin_api_feedback_delete(item_id):
+    if not _admin_key_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    item = db.session.get(FeedbackItem, item_id)
+    if not item:
+        return jsonify({"error": "Feedback not found"}), 404
+    db.session.delete(item)
+    db.session.commit()
+    return jsonify({"ok": True})
+
+
+@app.route("/admin/api/posts/<post_id>/resolve-report", methods=["POST"])
+def admin_api_resolve_report(post_id):
+    if not _admin_key_ok():
+        return jsonify({"error": "Unauthorized"}), 401
+    post = db.session.get(CommunityPost, post_id)
+    if not post:
+        return jsonify({"error": "Post not found"}), 404
+    action = (request.get_json(silent=True) or {}).get("action", "dismiss")
+    if action == "hide":
+        post.is_deleted = True
+    post.report_count = 0
+    db.session.commit()
+    return jsonify({"ok": True, "action": action})
 
 
 # ---------------------------------------------------------------------------
@@ -2891,17 +3040,51 @@ def api_learning_status():
 @app.route("/api/community/posts", methods=["GET"])
 @login_required
 def api_community_posts():
-    """Get paginated feed of community posts"""
+    """Get paginated feed of community posts (supports ?category=&q=&sort=)"""
     page = max(1, int(request.args.get("page", 1)))
     per_page = min(20, int(request.args.get("per_page", 10)))
+    category = (request.args.get("category") or "").strip()
+    q = (request.args.get("q") or "").strip()
+    sort = (request.args.get("sort") or "new").strip()
     user = current_user()
-    
-    query = CommunityPost.query.filter_by(is_deleted=False).order_by(
-        CommunityPost.is_pinned.desc(), CommunityPost.created_at.desc()
-    )
-    total = query.count()
-    posts = query.offset((page - 1) * per_page).limit(per_page).all()
-    
+
+    query = CommunityPost.query.filter_by(is_deleted=False)
+    if category:
+        query = query.filter_by(category=category)
+    if q:
+        like = f"%{q}%"
+        query = query.filter(CommunityPost.content.ilike(like))
+
+    if sort == "top":
+        # Rank by engagement (likes + comments)
+        total = CommunityPost.query.filter_by(is_deleted=False)
+        if category:
+            total = total.filter_by(category=category)
+        if q:
+            total = total.filter(CommunityPost.content.ilike(f"%{q}%"))
+        total = total.count()
+        engagement = (
+            func.count(distinct(CommunityLike.id)) * 2 + func.count(distinct(CommunityComment.id))
+        ).label("engagement")
+        rows = (
+            CommunityPost.query.filter_by(is_deleted=False)
+            .outerjoin(CommunityLike).outerjoin(CommunityComment)
+            .group_by(CommunityPost.id)
+            .order_by(CommunityPost.is_pinned.desc(), engagement.desc(), CommunityPost.created_at.desc())
+            .offset((page - 1) * per_page).limit(per_page).all()
+        )
+        return jsonify({
+            "posts": [p.to_dict(current_user_id=user.id) for p in rows],
+            "page": page,
+            "per_page": per_page,
+            "total": total,
+            "pages": max(1, (total + per_page - 1) // per_page)
+        })
+    else:
+        query = query.order_by(CommunityPost.is_pinned.desc(), CommunityPost.created_at.desc())
+        total = query.count()
+        posts = query.offset((page - 1) * per_page).limit(per_page).all()
+
     return jsonify({
         "posts": [p.to_dict(current_user_id=user.id) for p in posts],
         "page": page,
@@ -2919,7 +3102,10 @@ def api_community_create_post():
     data = request.get_json(silent=True) or {}
     content = (data.get("content") or "").strip()
     media_urls = data.get("media_urls") or []
-    
+    category = (data.get("category") or "general").strip()
+    if category not in ("progress", "question", "buddy", "tips", "motivation", "general"):
+        category = "general"
+
     if not content and not media_urls:
         return jsonify({"error": "Post must have content or media"}), 400
     if len(content) > 5000:
@@ -2934,7 +3120,8 @@ def api_community_create_post():
     post = CommunityPost(
         user_id=user.id,
         content=content,
-        media_urls=valid_media
+        media_urls=valid_media,
+        category=category
     )
     db.session.add(post)
     db.session.commit()
@@ -3062,6 +3249,195 @@ def api_community_toggle_comment_like(comment_id):
         db.session.add(like)
         db.session.commit()
         return jsonify({"ok": True, "liked": True, "like_count": len(comment.likes) + 1})
+
+
+@app.route("/api/community/posts/<post_id>/report", methods=["POST"])
+@login_required
+def api_community_report_post(post_id):
+    """Flag a post for admin moderation (soft counter, no hard delete)."""
+    user = current_user()
+    post = db.session.get(CommunityPost, post_id)
+    if not post or post.is_deleted:
+        return jsonify({"error": "Post not found"}), 404
+    post.report_count = (post.report_count or 0) + 1
+    db.session.commit()
+    return jsonify({"ok": True, "report_count": post.report_count})
+
+
+@app.route("/api/community/stats", methods=["GET"])
+@login_required
+def api_community_stats():
+    """Community stats + top contributors leaderboard."""
+    total_posts = CommunityPost.query.filter_by(is_deleted=False).count()
+    total_comments = CommunityComment.query.filter_by(is_deleted=False).count()
+    total_users = User.query.filter(User.is_active.is_not(False)).count()
+
+    # Top contributors by (posts*3 + comments*2 + likes)
+    leaderboard_rows = db.session.query(
+        CommunityPost.user_id,
+        func.count(CommunityPost.id).label("c")
+    ).filter_by(is_deleted=False).group_by(CommunityPost.user_id).all()
+    comment_rows = db.session.query(
+        CommunityComment.user_id,
+        func.count(CommunityComment.id)
+    ).filter_by(is_deleted=False).group_by(CommunityComment.user_id).all()
+    like_rows = db.session.query(
+        CommunityLike.user_id,
+        func.count(CommunityLike.id)
+    ).group_by(CommunityLike.user_id).all()
+
+    scores = {}
+    for uid, c in leaderboard_rows:
+        scores[uid] = scores.get(uid, 0) + c * 3
+    for uid, c in comment_rows:
+        scores[uid] = scores.get(uid, 0) + c * 2
+    for uid, c in like_rows:
+        scores[uid] = scores.get(uid, 0) + c
+
+    top_users = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)[:10]
+    leaderboard = []
+    for uid, score in top_users:
+        u = db.session.get(User, uid)
+        if not u:
+            continue
+        streak_data = u.get("learning_data") or {}
+        streak = 0
+        try:
+            streak = streak_data.get("current_streak_days") or streak_data.get("best_streak_days") or 0
+        except Exception:
+            pass
+        leaderboard.append({
+            "id": u.id,
+            "username": u.username,
+            "photo_url": u.photo_url,
+            "score": score,
+            "streak": streak,
+        })
+
+    return jsonify({
+        "total_posts": total_posts,
+        "total_comments": total_comments,
+        "total_users": total_users,
+        "leaderboard": leaderboard,
+    })
+
+
+# ---------------------------------------------------------------------------
+# Feedback & Suggestions — every user's voice matters
+# ---------------------------------------------------------------------------
+def _feedback_admin():
+    return os.environ.get("ADMIN_EMAIL", "admin@synora.app")
+
+
+@app.route("/api/feedback", methods=["GET"])
+@login_required
+def api_feedback_list():
+    """List feedback/suggestions. Admin sees all; regular users see their own + others' approved items."""
+    user = current_user()
+    is_admin = user.email == _feedback_admin()
+    category = (request.args.get("category") or "").strip()
+    status = (request.args.get("status") or "").strip()
+    q = (request.args.get("q") or "").strip()
+
+    query = FeedbackItem.query
+    if not is_admin:
+        # Regular users see all open (non-closed) items + their own
+        query = query.filter(
+            (FeedbackItem.status != "closed") | (FeedbackItem.user_id == user.id)
+        )
+    if category:
+        query = query.filter_by(category=category)
+    if status:
+        query = query.filter_by(status=status)
+    if q:
+        query = query.filter((FeedbackItem.title.ilike(f"%{q}%")) | (FeedbackItem.content.ilike(f"%{q}%")))
+
+    items = query.order_by(
+        db.case(
+            (FeedbackItem.status == "shipped", 0),
+            (FeedbackItem.status == "building", 1),
+            (FeedbackItem.status == "acknowledged", 2),
+            (FeedbackItem.status == "new", 3),
+            else_=4
+        ), FeedbackItem.created_at.desc()
+    ).limit(100).all()
+    return jsonify({"items": [i.to_dict(current_user_id=user.id) for i in items]})
+
+
+@app.route("/api/feedback", methods=["POST"])
+@login_required
+def api_feedback_create():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    title = (data.get("title") or "").strip()
+    content = (data.get("content") or "").strip()
+    category = (data.get("category") or "feedback").strip()
+    if category not in ("feature", "bug", "feedback", "question"):
+        category = "feedback"
+    if not title:
+        return jsonify({"error": "Title is required"}), 400
+    if len(title) > 200:
+        return jsonify({"error": "Title too long (max 200 chars)"}), 400
+    if len(content) > 5000:
+        return jsonify({"error": "Details too long (max 5000 chars)"}), 400
+
+    item = FeedbackItem(user_id=user.id, title=title, content=content, category=category)
+    db.session.add(item)
+    db.session.commit()
+    return jsonify({"ok": True, "item": item.to_dict(current_user_id=user.id)}), 201
+
+
+@app.route("/api/feedback/<item_id>/vote", methods=["POST"])
+@login_required
+def api_feedback_vote(item_id):
+    user = current_user()
+    item = db.session.get(FeedbackItem, item_id)
+    if not item:
+        return jsonify({"error": "Feedback not found"}), 404
+    existing = FeedbackVote.query.filter_by(feedback_id=item_id, user_id=user.id).first()
+    if existing:
+        db.session.delete(existing)
+        db.session.commit()
+        return jsonify({"ok": True, "voted": False, "vote_count": len(item.votes)})
+    else:
+        vote = FeedbackVote(feedback_id=item_id, user_id=user.id)
+        db.session.add(vote)
+        db.session.commit()
+        return jsonify({"ok": True, "voted": True, "vote_count": len(item.votes)})
+
+
+@app.route("/api/feedback/<item_id>/status", methods=["POST"])
+@login_required
+def api_feedback_status(item_id):
+    """Admin-only: update feedback status."""
+    user = current_user()
+    if user.email != _feedback_admin():
+        return jsonify({"error": "Not authorized"}), 403
+    item = db.session.get(FeedbackItem, item_id)
+    if not item:
+        return jsonify({"error": "Feedback not found"}), 404
+    data = request.get_json(silent=True) or {}
+    status = (data.get("status") or "").strip()
+    if status not in ("new", "acknowledged", "building", "shipped", "closed"):
+        return jsonify({"error": "Invalid status"}), 400
+    item.status = status
+    db.session.commit()
+    return jsonify({"ok": True, "item": item.to_dict(current_user_id=user.id)})
+
+
+@app.route("/api/feedback/<item_id>", methods=["DELETE"])
+@login_required
+def api_feedback_delete(item_id):
+    user = current_user()
+    item = db.session.get(FeedbackItem, item_id)
+    if not item:
+        return jsonify({"error": "Feedback not found"}), 404
+    is_admin = user.email == _feedback_admin()
+    if item.user_id != user.id and not is_admin:
+        return jsonify({"error": "Not authorized"}), 403
+    db.session.delete(item)
+    db.session.commit()
+    return jsonify({"ok": True})
 
 
 # ---------------------------------------------------------------------------

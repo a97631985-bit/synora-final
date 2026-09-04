@@ -125,6 +125,28 @@
       {% if page < pages %}<a class="btn" href="/admin?key={{ key }}&page={{ page+1 }}&q={{ q }}&f={{ f }}">Next</a>{% endif %}
     </div>
   </div>
+
+  <!-- ============ Feedback & Reported Content ============ -->
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;margin:28px 0 12px" id="feedback">
+    <h1 style="font-size:18px">User Feedback & Suggestions</h1>
+    <div class="seg" id="fbseg">
+      <button data-s="all" class="on">All</button>
+      <button data-s="new">New</button>
+      <button data-s="acknowledged">Acked</button>
+      <button data-s="building">Building</button>
+      <button data-s="shipped">Shipped</button>
+    </div>
+  </div>
+  <div class="card">
+    <div id="fbwrap" style="min-height:60px"><div class="empty">Loading feedback…</div></div>
+  </div>
+
+  <div style="margin:28px 0 12px" id="reports">
+    <h1 style="font-size:18px">Reported Posts</h1>
+  </div>
+  <div class="card">
+    <div id="repwrap" style="min-height:60px"><div class="empty">Loading…</div></div>
+  </div>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -166,5 +188,90 @@ document.getElementById('rows').addEventListener('click', e=>{
     else toast(res.error || 'Failed');
   }).catch(()=>toast('Network error'));
 });
+
+// ---------- Feedback & Reported posts ----------
+const fbWrap = document.getElementById('fbwrap');
+const repWrap = document.getElementById('repwrap');
+const FB_STATUSES = {'new':'New','acknowledged':'Acked','building':'Building','shipped':'Shipped','closed':'Closed'};
+let fbData = {items:[], reported_posts:[]};
+let fbFilter = 'all';
+
+function fbStatusPill(s){
+  const map = {'new':'warn','acknowledged':'good','building':'good','shipped':'good','closed':'bad'};
+  return '<span class="pill '+ (map[s]||'') +'">'+ (FB_STATUSES[s]||s) +'</span>';
+}
+function renderFeedback(){
+  const items = fbData.items.filter(i => fbFilter==='all' || i.status===fbFilter);
+  if(!items.length){ fbWrap.innerHTML = '<div class="empty">No feedback here yet.</div>'; return; }
+  fbWrap.innerHTML = items.map(i=>`
+    <div style="padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.06)" data-id="${i.id}">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="pill warn" style="border-color:#ffd16644;color:#ffd166">${i.category}</span>
+        ${fbStatusPill(i.status)}
+        <span class="muted" style="font-size:12px">▲ ${i.vote_count||0}</span>
+        <span style="font-weight:600;font-size:14px;flex:1;min-width:160px">${i.title.replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</span>
+        <span class="muted" style="font-size:12px">by ${i.author?i.author.username:'?'} • ${i.created_at?new Date(i.created_at).toLocaleString():''}</span>
+      </div>
+      <div class="muted" style="font-size:13px;margin-top:6px">${i.content.replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</div>
+      <div class="act" style="margin-top:8px;flex-wrap:wrap">
+        ${['new','acknowledged','building','shipped','closed'].map(s=>`<button class="btn fb-status ${i.status===s?'ok':''}" data-id="${i.id}" data-s="${s}">${FB_STATUSES[s]}</button>`).join('')}
+        <button class="btn danger fb-del" data-id="${i.id}">Delete</button>
+      </div>
+    </div>`).join('');
+}
+function renderReports(){
+  const rows = fbData.reported_posts || [];
+  if(!rows.length){ repWrap.innerHTML = '<div class="empty">No reported posts. 🎉</div>'; return; }
+  repWrap.innerHTML = rows.map(p=>`
+    <div style="padding:14px 16px;border-bottom:1px solid rgba(255,255,255,0.06)" data-id="${p.id}">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <span class="pill bad">${p.report_count} ⚑ reports</span>
+        <span style="font-weight:600">${p.author}</span>
+        <span class="muted" style="font-size:12px">${p.created_at?new Date(p.created_at).toLocaleString():''}</span>
+      </div>
+      <div class="muted" style="font-size:13px;margin-top:6px">${(p.content||'').replace(/[<>&]/g,c=>({'<':'&lt;','>':'&gt;','&':'&amp;'}[c]))}</div>
+      <div class="act" style="margin-top:8px">
+        <button class="btn danger rep-hide" data-id="${p.id}">Hide post</button>
+        <button class="btn ok rep-dismiss" data-id="${p.id}">Dismiss</button>
+      </div>
+    </div>`).join('');
+}
+function reloadAdminFeedback(){
+  fetch('/admin/api/feedback', {headers:{'X-Admin-Key': KEY}})
+    .then(r=>r.json()).then(d=>{ fbData = d; renderFeedback(); renderReports(); })
+    .catch(()=>{ fbWrap.innerHTML='<div class="empty">Failed to load.</div>'; repWrap.innerHTML=''; });
+}
+document.getElementById('fbseg').addEventListener('click', e=>{
+  const b = e.target.closest('button'); if(!b) return;
+  fbFilter = b.dataset.s;
+  document.querySelectorAll('#fbseg button').forEach(x=>x.classList.remove('on'));
+  b.classList.add('on');
+  renderFeedback();
+});
+fbWrap.addEventListener('click', e=>{
+  const sb = e.target.closest('.fb-status');
+  if(sb){
+    fetch('/admin/api/feedback/'+sb.dataset.id+'/status', {method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':KEY}, body:JSON.stringify({status:sb.dataset.s})})
+      .then(r=>r.json()).then(res=>{ if(res.ok){ toast('Status updated'); reloadAdminFeedback(); } else toast(res.error||'Failed'); });
+    return;
+  }
+  const db = e.target.closest('.fb-del');
+  if(db){
+    if(!confirm('Delete this feedback?')) return;
+    fetch('/admin/api/feedback/'+db.dataset.id, {method:'DELETE', headers:{'X-Admin-Key':KEY}})
+      .then(r=>r.json()).then(res=>{ if(res.ok){ toast('Deleted'); reloadAdminFeedback(); } else toast(res.error||'Failed'); });
+    return;
+  }
+});
+repWrap.addEventListener('click', e=>{
+  const hb = e.target.closest('.rep-hide');
+  const db = e.target.closest('.rep-dismiss');
+  const id = (hb||db)?.dataset.id; if(!id) return;
+  const action = hb ? 'hide' : 'dismiss';
+  if(hb && !confirm('Hide this post from community?')) return;
+  fetch('/admin/api/posts/'+id+'/resolve-report', {method:'POST', headers:{'Content-Type':'application/json','X-Admin-Key':KEY}, body:JSON.stringify({action})})
+    .then(r=>r.json()).then(res=>{ if(res.ok){ toast(action==='hide'?'Post hidden':'Report dismissed'); reloadAdminFeedback(); } else toast(res.error||'Failed'); });
+});
+reloadAdminFeedback();
 </script>
 </body></html>

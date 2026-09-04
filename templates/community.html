@@ -17,56 +17,127 @@
     </div>
   </header>
 
-  <main class="flex-1 p-5 md:p-10 max-w-3xl mx-auto w-full pb-16">
-    
-    <!-- Create Post Card -->
-    <div id="createPostCard" class="glass-panel rounded-2xl p-4 mb-6 border border-white/5">
-      <div class="flex items-start gap-3">
-        <div class="w-10 h-10 rounded-full synora-gradient flex items-center justify-center text-on-primary font-bold shrink-0">
-          {{ (session.username or 'U')[:1]|upper }}
-        </div>
-        <div class="flex-1 min-w-0">
-          <button id="openCreatePostBtn" class="w-full text-left px-4 py-3 bg-surface-container-low rounded-xl border border-white/5 placeholder:text-on-surface-variant transition-all hover:border-primary/30 focus:outline-none focus:ring-2 focus:ring-primary/20" 
-                  style="min-height: 60px;" aria-label="Create a post">
-            What's on your mind, {{ session.username or 'Student' }}?
-          </button>
-          <div id="createPostExpanded" class="hidden mt-3 space-y-3">
-            <textarea id="postContent" rows="3" class="w-full bg-surface-container-low border border-white/5 rounded-xl px-4 py-3 text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20 resize-none" placeholder="Share your thoughts, progress, questions..."></textarea>
-            <div id="mediaPreview" class="hidden space-y-2"></div>
-            <div class="flex items-center justify-between pt-2 border-t border-white/5">
-              <div class="flex gap-2">
-                <button type="button" id="addImageBtn" class="btn-ghost text-sm" aria-label="Add image"><span class="material-symbols-outlined align-middle mr-1">add_photo_alternate</span> Image</button>
-                <button type="button" id="addVideoBtn" class="btn-ghost text-sm" aria-label="Add video"><span class="material-symbols-outlined align-middle mr-1">videocam</span> Video</button>
-              </div>
-              <div class="flex gap-2">
-                <button type="button" id="cancelPostBtn" class="btn-ghost text-sm">Cancel</button>
-                <button type="button" id="submitPostBtn" class="btn-primary text-sm" disabled><span class="material-symbols-outlined align-middle mr-1">send</span> Post</button>
+  <main class="flex-1 p-5 md:p-8 max-w-6xl mx-auto w-full pb-16">
+    <!-- Tabs -->
+    <div class="flex gap-2 mb-5">
+      <button id="tabPostsBtn" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold transition-all"></button>
+      <button id="tabFeedbackBtn" class="tab-btn px-4 py-2 rounded-xl text-sm font-semibold transition-all"></button>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
+      <!-- ==================== LEFT: Feed / Feedback ==================== -->
+      <div class="min-w-0" id="postsTab">
+        <!-- Create Post Card -->
+        <div id="createPostCard" class="glass-panel rounded-2xl p-4 mb-5 border border-white/5">
+          <div class="flex items-start gap-3">
+            <div class="w-10 h-10 rounded-full synora-gradient flex items-center justify-center text-on-primary font-bold shrink-0">
+              {{ (session.username or 'U')[:1]|upper }}
+            </div>
+            <div class="flex-1 min-w-0">
+              <button id="openCreatePostBtn" class="w-full text-left px-4 py-3 bg-surface-container-low rounded-xl border border-white/5 placeholder:text-on-surface-variant transition-all hover:border-primary/30 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                      style="min-height: 60px;" aria-label="Create a post">
+                What's on your mind, {{ session.username or 'Student' }}?
+              </button>
+              <div id="createPostExpanded" class="hidden mt-3 space-y-3">
+                <textarea id="postContent" rows="3" class="w-full bg-surface-container-low border border-white/5 rounded-xl px-4 py-3 text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20 resize-none" placeholder="Share your thoughts, progress, questions..."></textarea>
+                <select id="postCategory" class="w-full md:w-auto bg-surface-container-low border border-white/5 rounded-xl px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary/50">
+                  <option value="progress">🎯 Progress</option>
+                  <option value="question">❓ Question</option>
+                  <option value="buddy">👥 Study Buddy</option>
+                  <option value="tips">💡 Tips & Tricks</option>
+                  <option value="motivation">⚡ Motivation</option>
+                  <option value="general">💬 General</option>
+                </select>
+                <div id="mediaPreview" class="hidden space-y-2"></div>
+                <div class="flex items-center justify-between pt-2 border-t border-white/5 flex-wrap gap-2">
+                  <div class="flex gap-2">
+                    <button type="button" id="addImageBtn" class="btn-ghost text-sm" aria-label="Add image"><span class="material-symbols-outlined align-middle mr-1">add_photo_alternate</span> Image</button>
+                    <button type="button" id="addVideoBtn" class="btn-ghost text-sm" aria-label="Add video"><span class="material-symbols-outlined align-middle mr-1">videocam</span> Video</button>
+                  </div>
+                  <div class="flex gap-2">
+                    <button type="button" id="cancelPostBtn" class="btn-ghost text-sm">Cancel</button>
+                    <button type="button" id="submitPostBtn" class="btn-primary text-sm" disabled><span class="material-symbols-outlined align-middle mr-1">send</span> Post</button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
         </div>
+
+        <!-- Filter toolbar -->
+        <div class="flex flex-wrap items-center gap-2 mb-4">
+          <div id="categoryChips" class="flex flex-wrap gap-1.5"></div>
+          <div class="flex items-center gap-2 ml-auto">
+            <div class="relative">
+              <span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-on-surface-variant text-[16px]">search</span>
+              <input id="searchInput" type="text" placeholder="Search posts…" class="bg-surface-container-low border border-white/5 rounded-xl pl-9 pr-3 py-2 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary/50 w-40 md:w-56">
+            </div>
+            <div class="seg-toggle flex bg-surface-container-low border border-white/5 rounded-xl p-0.5">
+              <button id="sortNewBtn" class="px-3 py-1.5 rounded-lg text-xs font-semibold seg-on" title="Newest first">New</button>
+              <button id="sortTopBtn" class="px-3 py-1.5 rounded-lg text-xs font-semibold" title="Most engaged">Top</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Posts Feed -->
+        <div id="postsFeed" class="space-y-4"></div>
+
+        <!-- Pagination -->
+        <div id="pagination" class="flex justify-center gap-2 mt-6" hidden>
+          <button id="prevPage" class="btn-ghost" disabled>Previous</button>
+          <span id="pageInfo" class="flex items-center text-on-surface-variant text-sm"></span>
+          <button id="nextPage" class="btn-ghost" disabled>Next</button>
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="hidden text-center py-12">
+          <span class="material-symbols-outlined text-6xl text-on-surface-variant/30">forum</span>
+          <h3 class="mt-4 text-lg font-semibold">No posts yet</h3>
+          <p class="text-on-surface-variant text-sm mt-1">Be the first to share something!</p>
+        </div>
+      </div>
+
+      <!-- ==================== LEFT: Feedback tab ==================== -->
+      <div class="hidden min-w-0" id="feedbackTab">
+        <!-- Feedback CTA -->
+        <div class="glass-panel rounded-2xl p-5 mb-5 border border-white/5">
+          <div class="flex items-start gap-3">
+            <span class="material-symbols-outlined text-primary" style="font-variation-settings:'FILL'1">volunteer_activism</span>
+            <div class="flex-1">
+              <h3 class="font-semibold text-on-surface">Your voice matters 💚</h3>
+              <p class="text-sm text-on-surface-variant mt-1">Feature ideas, bug reports, or anything you want — we read every single one and vote on what to build next.</p>
+              <div class="flex gap-2 mt-3">
+                <button id="openFeedbackBtn" class="btn-primary text-sm"><span class="material-symbols-outlined align-middle mr-1 text-[16px]">add</span> Share a suggestion</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Feedback categories filter -->
+        <div id="feedbackChips" class="flex flex-wrap gap-1.5 mb-4"></div>
+
+        <!-- Feedback list -->
+        <div id="feedbackList" class="space-y-3"></div>
+        <div id="feedbackEmpty" class="hidden text-center py-12">
+          <span class="material-symbols-outlined text-6xl text-on-surface-variant/30">lightbulb</span>
+          <h3 class="mt-4 text-lg font-semibold">No suggestions yet</h3>
+          <p class="text-on-surface-variant text-sm mt-1">Be the first to shape the roadmap!</p>
+        </div>
+      </div>
+
+      <!-- ==================== RIGHT: Stats & Leaderboard ==================== -->
+      <div class="space-y-4 sticky top-24 self-start hidden lg:block">
+        <div class="glass-panel rounded-2xl p-4 border border-white/5">
+          <h3 class="font-semibold text-sm mb-3">Community Pulse</h3>
+          <div id="statsGrid" class="grid grid-cols-3 gap-2 text-center">…</div>
+        </div>
+        <div class="glass-panel rounded-2xl p-4 border border-white/5">
+          <h3 class="font-semibold text-sm mb-1">Top Contributors</h3>
+          <p class="text-xs text-on-surface-variant mb-3">Most helpful members this month</p>
+          <div id="leaderboard" class="space-y-3">…</div>
+        </div>
       </div>
     </div>
-
-    <!-- Posts Feed -->
-    <div id="postsFeed" class="space-y-4">
-      <!-- Posts rendered here -->
-    </div>
-
-    <!-- Pagination -->
-    <div id="pagination" class="flex justify-center gap-2 mt-6" hidden>
-      <button id="prevPage" class="btn-ghost" disabled>Previous</button>
-      <span id="pageInfo" class="flex items-center text-on-surface-variant text-sm"></span>
-      <button id="nextPage" class="btn-ghost" disabled>Next</button>
-    </div>
-
-    <!-- Empty State -->
-    <div id="emptyState" class="hidden text-center py-12">
-      <span class="material-symbols-outlined text-6xl text-on-surface-variant/30">forum</span>
-      <h3 class="mt-4 text-lg font-semibold">No posts yet</h3>
-      <p class="text-on-surface-variant text-sm mt-1">Be the first to share something!</p>
-    </div>
-
   </main>
 </div>
 
@@ -79,6 +150,14 @@
     </div>
     <div class="p-4 space-y-4">
       <textarea id="modalPostContent" rows="4" class="w-full bg-surface-container-low border border-white/5 rounded-xl px-4 py-3 text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary/50 focus:ring-2 focus:ring-primary/20 resize-none" placeholder="Share your thoughts..."></textarea>
+      <select id="modalPostCategory" class="w-full bg-surface-container-low border border-white/5 rounded-xl px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary/50">
+        <option value="progress">🎯 Progress</option>
+        <option value="question">❓ Question</option>
+        <option value="buddy">👥 Study Buddy</option>
+        <option value="tips">💡 Tips & Tricks</option>
+        <option value="motivation">⚡ Motivation</option>
+        <option value="general">💬 General</option>
+      </select>
       <div id="modalMediaPreview" class="hidden space-y-2"></div>
       <div class="flex gap-2">
         <button type="button" id="modalAddImageBtn" class="btn-ghost flex-1"><span class="material-symbols-outlined mr-1">add_photo_alternate</span> Image</button>
@@ -92,11 +171,38 @@
   </div>
 </div>
 
+<!-- Feedback Modal -->
+<div id="feedbackModal" class="fixed inset-0 z-50 hidden items-center justify-center bg-black/60 backdrop-blur-sm">
+  <div class="glass-panel rounded-2xl w-full max-w-md mx-4 max-h-[90vh] overflow-y-auto">
+    <div class="flex items-center justify-between p-4 border-b border-white/5 sticky top-0 bg-surface z-10">
+      <h2 class="font-bold">Share Feedback 💡</h2>
+      <button id="closeFeedbackBtn" class="btn-ghost p-2" aria-label="Close"><span class="material-symbols-outlined">close</span></button>
+    </div>
+    <div class="p-4 space-y-4">
+      <select id="feedbackCategory" class="w-full bg-surface-container-low border border-white/5 rounded-xl px-3 py-2 text-sm text-on-surface focus:outline-none focus:border-primary/50">
+        <option value="feature">✨ Feature Request</option>
+        <option value="bug">🐞 Bug Report</option>
+        <option value="feedback">💬 General Feedback</option>
+        <option value="question">❓ Question</option>
+      </select>
+      <input id="feedbackTitle" type="text" maxlength="200" placeholder="One-line summary…" class="w-full bg-surface-container-low border border-white/5 rounded-xl px-4 py-2.5 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary/50">
+      <textarea id="feedbackContent" rows="4" maxlength="5000" class="w-full bg-surface-container-low border border-white/5 rounded-xl px-4 py-3 text-sm text-on-surface placeholder:text-on-surface-variant focus:outline-none focus:border-primary/50 resize-none" placeholder="Tell us more… (what, why, how would it help?)"></textarea>
+      <div class="flex gap-2 pt-2 border-t border-white/5">
+        <button type="button" id="cancelFeedbackBtn" class="btn-ghost flex-1">Cancel</button>
+        <button type="button" id="submitFeedbackBtn" class="btn-primary flex-1" disabled>Submit</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script>
 const API = '/api/community';
 let currentPage = 1;
 let isLoading = false;
 let hasMore = true;
+let currentCategory = '';
+let currentSort = 'new';
+let searchTimer = null;
 
 // ---------- Helpers ----------
 function $(sel, ctx=document) { return ctx.querySelector(sel); }
@@ -110,13 +216,77 @@ function timeAgo(iso) {
   return new Date(iso).toLocaleDateString();
 }
 function escapeHtml(str) {
-  return str.replace(/[&<>"']/g, c => ({'&':'&','<':'<','>':'>','"':'"',"'":'''}[c]));
+  return String(str||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 }
 function nl2br(str) {
   return escapeHtml(str).replace(/\n/g, '<br>');
 }
 
-// ---------- Modal / Create Post UI ----------
+const CATEGORY_META = {
+  progress: {icon:'🎯', label:'Progress'},
+  question: {icon:'❓', label:'Question'},
+  buddy: {icon:'👥', label:'Study Buddy'},
+  tips: {icon:'💡', label:'Tips & Tricks'},
+  motivation: {icon:'⚡', label:'Motivation'},
+  general: {icon:'💬', label:'General'}
+};
+
+// ---------- Tabs ----------
+const tabPostsBtn = $('#tabPostsBtn');
+const tabFeedbackBtn = $('#tabFeedbackBtn');
+const postsTab = $('#postsTab');
+const feedbackTab = $('#feedbackTab');
+function setTab(which){
+  const posts = which==='posts';
+  postsTab.classList.toggle('hidden', !posts);
+  feedbackTab.classList.toggle('hidden', posts);
+  tabPostsBtn.classList.toggle('tab-active', posts);
+  tabFeedbackBtn.classList.toggle('tab-active', !posts);
+  if(!posts && feedbackList.children.length===0 && !feedbackLoaded) loadFeedback();
+}
+tabPostsBtn.textContent = '💬 Posts';
+tabFeedbackBtn.textContent = '🚀 Feedback & Ideas';
+setTab('posts');
+tabPostsBtn.onclick = () => setTab('posts');
+tabFeedbackBtn.onclick = () => setTab('feedback');
+
+// ---------- Category chips ----------
+let feedbackCat = '';
+const categoryChips = $('#categoryChips');
+function renderChips(){
+  const all = [{key:'', label:'All'}, ...Object.entries(CATEGORY_META).map(([k,v])=>({key:k, label:v.icon+' '+v.label}))];
+  categoryChips.innerHTML = all.map(c=>`
+    <button data-cat="${c.key}" class="chip ${currentCategory===c.key?'chip-on':''}">${c.label}</button>`).join('');
+  categoryChips.querySelectorAll('.chip').forEach(b=>{
+    b.onclick = () => { currentCategory = b.dataset.cat; renderChips(); loadPosts(true); };
+  });
+  // Feedback chips
+  const fbChips = [{key:'', label:'All'},{key:'feature',label:'✨ Features'},{key:'bug',label:'🐞 Bugs'},{key:'feedback',label:'💬 Feedback'},{key:'question',label:'❓ Q&A'}];
+  const fc = $('#feedbackChips');
+  fc.innerHTML = fbChips.map(c=>`<button data-fc="${c.key}" class="chip ${feedbackCat===c.key?'chip-on':''}">${c.label}</button>`).join('');
+  fc.querySelectorAll('button').forEach(b=>{
+    b.onclick = () => { feedbackCat = b.dataset.fc; renderChips(); loadFeedback(); };
+  });
+}
+renderChips();
+
+// ---------- Sort + search ----------
+const sortNewBtn = $('#sortNewBtn'), sortTopBtn = $('#sortTopBtn');
+const searchInput = $('#searchInput');
+function setSort(s){
+  currentSort = s;
+  sortNewBtn.classList.toggle('seg-on', s==='new');
+  sortTopBtn.classList.toggle('seg-on', s==='top');
+  loadPosts(true);
+}
+sortNewBtn.onclick = () => setSort('new');
+sortTopBtn.onclick = () => setSort('top');
+searchInput.addEventListener('input', ()=>{
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(()=>loadPosts(true), 400);
+});
+
+// ---------- Create Post UI ----------
 const createCard = $('#createPostCard');
 const expanded = $('#createPostExpanded');
 const openBtn = $('#openCreatePostBtn');
@@ -135,7 +305,7 @@ const modalCancel = $('#modalCancelBtn');
 const modalSubmit = $('#modalSubmitBtn');
 const closeModal = $('#closeModalBtn');
 
-let pendingMedia = []; // {type, url}
+let pendingMedia = [];
 
 function openComposer() {
   expanded.classList.remove('hidden');
@@ -213,14 +383,16 @@ modalContent.addEventListener('input', updateSubmitState);
 
 // ---------- Submit Post ----------
 async function submitPost() {
-  const text = (window.innerWidth < 640 ? modalContent : contentEl).value.trim();
+  const mobile = window.innerWidth < 640;
+  const text = (mobile ? modalContent : contentEl).value.trim();
+  const category = (mobile ? $('#modalPostCategory') : $('#postCategory')).value;
   if (!text && pendingMedia.length === 0) return;
   submitBtn.disabled = true; modalSubmit.disabled = true;
   try {
     const res = await fetch(`${API}/posts`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({content: text, media_urls: pendingMedia})
+      body: JSON.stringify({content: text, media_urls: pendingMedia, category})
     });
     const data = await res.json();
     if (res.ok) {
@@ -246,7 +418,8 @@ function renderPost(post) {
   const isAuthor = post.author?.id === (window.currentUserId || null);
   const isAdmin = window.isAdmin === true;
   const canDelete = isAuthor || isAdmin;
-  const mediaHtml = (post.media_urls || []).map(m => 
+  const cat = CATEGORY_META[post.category] || CATEGORY_META.general;
+  const mediaHtml = (post.media_urls || []).map(m =>
     m.type === 'image' ? `<img src="${escapeHtml(m.url)}" class="rounded-xl max-h-64 w-auto my-2 cursor-zoom-in" loading="lazy" onclick="this.requestFullscreen?.()">`
     : `<video src="${escapeHtml(m.url)}" class="rounded-xl max-h-64 w-auto my-2" controls></video>`
   ).join('');
@@ -258,10 +431,11 @@ function renderPost(post) {
           ${post.author?.username?.[0]?.toUpperCase() || '?'}
         </div>
         <div class="flex-1 min-w-0">
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-2 flex-wrap">
             <span class="font-semibold">${escapeHtml(post.author?.username || 'Unknown')}</span>
             ${post.author?.photo_url ? '<span class="material-symbols-outlined text-tertiary text-xs" title="Verified">verified</span>' : ''}
             <span class="text-on-surface-variant text-xs">${timeAgo(post.created_at)}</span>
+            <span class="px-2 py-0.5 text-xs rounded-full border border-white/10 bg-surface-container-low text-on-surface-variant">${cat.icon} ${cat.label}</span>
             ${post.is_pinned ? '<span class="px-2 py-0.5 text-xs bg-amber-500/20 text-amber-400 rounded-full border border-amber-500/30">Pinned</span>' : ''}
           </div>
           <p class="mt-2 whitespace-pre-wrap text-sm">${nl2br(post.content)}</p>
@@ -275,7 +449,10 @@ function renderPost(post) {
               <span class="material-symbols-outlined">chat_bubble_outline</span>
               <span>${post.comment_count || 0}</span>
             </button>
-            ${canDelete ? `<button class="delete-post-btn ml-auto text-on-surface-variant hover:text-error transition-colors text-sm" data-id="${post.id}">Delete</button>` : ''}
+            <button class="report-btn flex items-center gap-1 text-on-surface-variant hover:text-warning transition-colors text-xs ml-auto" data-id="${post.id}" title="Report this post">
+              <span class="material-symbols-outlined text-[16px]">flag</span> Report
+            </button>
+            ${canDelete ? `<button class="delete-post-btn text-on-surface-variant hover:text-error transition-colors text-sm" data-id="${post.id}">Delete</button>` : ''}
           </div>
           <!-- Comments Section -->
           <div class="comments-section hidden mt-4 space-y-3" data-post-id="${post.id}">
@@ -329,22 +506,26 @@ async function loadPosts(reset=false) {
   if (!hasMore) return;
   isLoading = true;
   try {
-    const res = await fetch(`${API}/posts?page=${currentPage}&per_page=10`);
+    const params = new URLSearchParams({page: currentPage, per_page: 10, sort: currentSort});
+    if (currentCategory) params.set('category', currentCategory);
+    const q = searchInput.value.trim();
+    if (q) params.set('q', q);
+    const res = await fetch(`${API}/posts?${params.toString()}`);
     const data = await res.json();
     if (res.ok) {
-      if (data.posts.length === 0 && currentPage === 1) {
-        emptyState.classList.remove('hidden');
-        feed.classList.add('hidden');
-      } else {
-        emptyState.classList.add('hidden');
-        feed.classList.remove('hidden');
-        data.posts.forEach(p => feed.insertAdjacentHTML('beforeend', renderPost(p)));
-        attachPostListeners();
-      }
+      // Remove "no posts" empties
+      emptyState.classList.add('hidden');
+      feed.classList.remove('hidden');
+      feed.insertAdjacentHTML('beforeend', data.posts.map(renderPost).join(''));
+      attachPostListeners();
       hasMore = currentPage < data.pages;
       currentPage++;
-      pagination.hidden = !hasMore && currentPage <= 1;
-      pageInfo.textContent = `Page ${currentPage - 1} of ${data.pages || 1}`;
+      if (data.posts.length === 0 && currentPage === 1) {
+        feed.classList.add('hidden');
+        emptyState.classList.remove('hidden');
+      }
+      pagination.hidden = data.pages <= 1 && currentPage <= 1;
+      pageInfo.textContent = `Page ${Math.min(currentPage-1, data.pages)} of ${data.pages || 1} • ${data.total} posts`;
       prevPage.disabled = currentPage <= 2;
       nextPage.disabled = !hasMore;
     }
@@ -352,9 +533,7 @@ async function loadPosts(reset=false) {
   finally { isLoading = false; }
 }
 
-// Attach listeners for dynamically added posts
 function attachPostListeners() {
-  // Like post
   $all('.like-btn').forEach(btn => {
     btn.onclick = async () => {
       const id = btn.dataset.id;
@@ -370,14 +549,12 @@ function attachPostListeners() {
       } catch (e) {}
     };
   });
-  // Toggle comments
   $all('.comment-toggle-btn').forEach(btn => {
     btn.onclick = () => {
       const section = $(`.comments-section[data-post-id="${btn.dataset.id}"]`);
       section.classList.toggle('hidden');
     };
   });
-  // Delete post
   $all('.delete-post-btn').forEach(btn => {
     btn.onclick = async () => {
       if (!confirm('Delete this post?')) return;
@@ -388,7 +565,16 @@ function attachPostListeners() {
       } catch (e) {}
     };
   });
-  // Add comment
+  $all('.report-btn').forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm('Report this post for review? Our team will check it.')) return;
+      const id = btn.dataset.id;
+      try {
+        const res = await fetch(`${API}/posts/${id}/report`, {method: 'POST'});
+        if (res.ok) { btn.textContent = ''; btn.innerHTML = '<span class="material-symbols-outlined text-[16px]" style="font-variation-settings:\'FILL\'1">flag</span> Reported'; btn.disabled = true; }
+      } catch (e) {}
+    };
+  });
   $all('.comment-input').forEach(input => {
     input.addEventListener('keydown', async e => {
       if (e.key === 'Enter' && !e.shiftKey && input.value.trim()) {
@@ -407,7 +593,6 @@ function attachPostListeners() {
             const list = input.closest('.comments-section').querySelector('.comments-list');
             list.insertAdjacentHTML('beforeend', renderComments([data.comment]));
             attachCommentListeners(list);
-            // Update count
             const toggleBtn = $(`.comment-toggle-btn[data-id="${postId}"]`);
             if (toggleBtn) toggleBtn.querySelector('span:last-child').textContent = +toggleBtn.querySelector('span:last-child').textContent + 1;
           }
@@ -417,7 +602,6 @@ function attachPostListeners() {
   });
 }
 
-// Comment listeners (for new comments)
 function attachCommentListeners(container) {
   $all('.like-comment-btn', container).forEach(btn => {
     btn.onclick = async () => {
@@ -446,18 +630,157 @@ function attachCommentListeners(container) {
   });
 }
 
-// Pagination
 prevPage.onclick = () => { if (currentPage > 2) { currentPage -= 2; loadPosts(); } };
 nextPage.onclick = () => { if (hasMore) loadPosts(); };
 
-// Infinite scroll fallback
 window.addEventListener('scroll', () => {
   if (window.innerHeight + window.scrollY >= document.body.offsetHeight - 500) {
     if (hasMore && !isLoading) loadPosts();
   }
 });
 
-// Init
+// ---------- Stats & Leaderboard ----------
+const statsGrid = $('#statsGrid');
+const leaderboard = $('#leaderboard');
+function loadStats() {
+  fetch(`${API}/stats`).then(r=>r.json()).then(d=>{
+    if (d.total_posts === undefined) return;
+    statsGrid.innerHTML = `
+      <div class="text-center"><div class="text-xl font-bold text-primary">${d.total_posts}</div><div class="text-[11px] text-on-surface-variant">Posts</div></div>
+      <div class="text-center"><div class="text-xl font-bold text-tertiary">${d.total_comments}</div><div class="text-[11px] text-on-surface-variant">Comments</div></div>
+      <div class="text-center"><div class="text-xl font-bold" style="color:#ffd166">${d.total_users}</div><div class="text-[11px] text-on-surface-variant">Students</div></div>`;
+    const lbs = d.leaderboard || [];
+    if (!lbs.length) {
+      leaderboard.innerHTML = '<div class="text-xs text-on-surface-variant text-center py-2">Be the first contributor! 🚀</div>';
+      return;
+    }
+    const medals = ['🥇','🥈','🥉'];
+    leaderboard.innerHTML = lbs.slice(0, 5).map((u, i) => `
+      <div class="flex items-center gap-2">
+        <span class="text-sm w-5 text-center">${medals[i] || (i+1)}</span>
+        <div class="w-8 h-8 rounded-full synora-gradient flex items-center justify-center text-on-primary text-xs font-bold shrink-0">${(u.username||'?')[0].toUpperCase()}</div>
+        <div class="flex-1 min-w-0">
+          <div class="text-sm font-medium truncate">${escapeHtml(u.username)}</div>
+          ${u.streak ? `<div class="text-[11px] text-on-surface-variant">🔥 ${u.streak}d streak</div>` : ''}
+        </div>
+        <span class="text-xs font-semibold text-primary">${u.score}</span>
+      </div>`).join('');
+  }).catch(()=>{});
+}
+loadStats();
+
+// ---------- Feedback & Ideas ----------
+let feedbackLoaded = false;
+const feedbackList = $('#feedbackList');
+const feedbackEmpty = $('#feedbackEmpty');
+const fbModal = $('#feedbackModal');
+const fbTitle = $('#feedbackTitle');
+const fbContent = $('#feedbackContent');
+const fbCategory = $('#feedbackCategory');
+const fbSubmitBtn = $('#submitFeedbackBtn');
+
+const FB_STATUS_ICON = {new:'🆕', acknowledged:'👀', building:'🔨', shipped:'🚀', closed:'✅'};
+const FB_CAT_ICON = {feature:'✨', bug:'🐞', feedback:'💬', question:'❓'};
+
+function renderFeedbackItems(items) {
+  feedbackEmpty.classList.add('hidden');
+  feedbackList.classList.remove('hidden');
+  if (!items.length) { feedbackList.innerHTML=''; feedbackEmpty.classList.remove('hidden'); feedbackList.classList.add('hidden'); return; }
+  feedbackList.innerHTML = items.map(i => {
+    const isMine = i.author?.id === (window.currentUserId || null);
+    const catIcon = FB_CAT_ICON[i.category] || '💬';
+    return `
+    <div class="glass-panel rounded-2xl p-4 border border-white/5" data-id="${i.id}">
+      <div class="flex items-start gap-3">
+        <button class="vote-btn w-10 h-10 rounded-xl border flex flex-col items-center justify-center shrink-0 transition-all ${i.voted_by_current ? 'border-primary bg-primary/10 text-primary' : 'border-white/10 text-on-surface-variant hover:border-primary/40'}" data-id="${i.id}">
+          <span class="material-symbols-outlined text-[18px]" style="font-variation-settings:'FILL'${i.voted_by_current?1:0}">arrow_upward</span>
+          <span class="text-xs font-bold vote-count">${i.vote_count||0}</span>
+        </button>
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-xs px-2 py-0.5 rounded-full border border-white/10 bg-surface-container-low text-on-surface-variant">${catIcon} ${i.category}</span>
+            <span class="text-xs px-2 py-0.5 rounded-full border border-white/10 bg-surface-container-low" style="color:#ffd166">${FB_STATUS_ICON[i.status]||i.status} ${i.status[0].toUpperCase()+i.status.slice(1)}</span>
+            <span class="text-on-surface-variant text-xs">by ${escapeHtml(i.author?.username||'User')} • ${timeAgo(i.created_at)}</span>
+            ${isMine ? `<button class="fb-del-btn text-on-surface-variant hover:text-error text-xs ml-auto">Delete</button>` : ''}
+          </div>
+          <h4 class="font-semibold mt-1.5">${escapeHtml(i.title)}</h4>
+          <p class="text-sm text-on-surface-variant mt-1 whitespace-pre-wrap">${nl2br(i.content)}</p>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  // vote handlers
+  feedbackList.querySelectorAll('.vote-btn').forEach(b => {
+    b.onclick = async () => {
+      const id = b.dataset.id;
+      try {
+        const res = await fetch(`/api/feedback/${id}/vote`, {method:'POST'});
+        const data = await res.json();
+        if (res.ok) {
+          b.classList.toggle('border-primary', data.voted);
+          b.classList.toggle('bg-primary/10', data.voted);
+          b.classList.toggle('text-primary', data.voted);
+          b.querySelector('.material-symbols-outlined').style.fontVariationSettings = data.voted ? "'FILL' 1" : "'FILL' 0";
+          b.querySelector('.vote-count').textContent = data.vote_count;
+        }
+      } catch(e){}
+    };
+  });
+  feedbackList.querySelectorAll('.fb-del-btn').forEach(b => {
+    b.onclick = async () => {
+      if (!confirm('Delete this suggestion?')) return;
+      const id = b.dataset.id;
+      try {
+        const res = await fetch(`/api/feedback/${id}`, {method:'DELETE'});
+        if (res.ok) loadFeedback();
+      } catch(e){}
+    };
+  });
+}
+
+async function loadFeedback() {
+  const params = new URLSearchParams();
+  if (feedbackCat) params.set('category', feedbackCat);
+  try {
+    const res = await fetch(`/api/feedback?${params.toString()}`);
+    const data = await res.json();
+    if (res.ok) {
+      feedbackLoaded = true;
+      renderFeedbackItems(data.items || []);
+    }
+  } catch(e){}
+}
+
+// Feedback modal
+const openFeedbackBtn = $('#openFeedbackBtn');
+const closeFeedbackBtn = $('#closeFeedbackBtn');
+const cancelFeedbackBtn = $('#cancelFeedbackBtn');
+openFeedbackBtn.onclick = () => { fbModal.classList.remove('hidden'); fbModal.classList.add('flex'); fbTitle.focus(); };
+function closeFbModal(){ fbModal.classList.add('hidden'); fbModal.classList.remove('flex'); fbTitle.value=''; fbContent.value=''; fbSubmitBtn.disabled = true; }
+closeFeedbackBtn.onclick = closeFbModal;
+cancelFeedbackBtn.onclick = closeFbModal;
+fbModal.onclick = e => { if (e.target === fbModal) closeFbModal(); };
+function fbUpdate(){ fbSubmitBtn.disabled = !fbTitle.value.trim(); }
+fbTitle.addEventListener('input', fbUpdate);
+fbContent.addEventListener('input', fbUpdate);
+fbSubmitBtn.onclick = async () => {
+  const title = fbTitle.value.trim();
+  if (!title) return;
+  fbSubmitBtn.disabled = true;
+  try {
+    const res = await fetch('/api/feedback', {
+      method:'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({title, content: fbContent.value.trim(), category: fbCategory.value})
+    });
+    const data = await res.json();
+    if (res.ok) { closeFbModal(); loadFeedback(); setTab('feedback'); }
+    else alert(data.error || 'Failed to submit');
+  } catch(e){ alert('Network error'); }
+  finally { fbSubmitBtn.disabled = false; }
+};
+
+// ---------- Init ----------
 window.currentUserId = parseInt('{{ session.get("user_id", 0) }}') || null;
 window.currentUsername = '{{ session.username or "" }}';
 window.isAdmin = {{ 'true' if session.email == (config.get("ADMIN_EMAIL", "admin@synora.app")) else 'false' }};
@@ -472,6 +795,15 @@ loadPosts(true);
 .comment-item { animation: slideIn .2s ease; }
 @keyframes slideIn { from {opacity:0; transform:translateX(-10px)} to {opacity:1; transform:translateX(0)} }
 input[type="text"].comment-input::placeholder { color: #8a938c; }
+.tab-btn { background:transparent; color:#8a938c; border:1px solid transparent; }
+.tab-btn:hover { color:#e1e3e4; }
+.tab-active { background:#9ad3b61a; color:#9ad3b6; border-color:#9ad3b644; }
+.chip { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); color:#8a938c; padding:6px 12px; border-radius:99px; font-size:12px; cursor:pointer; transition:all .2s; }
+.chip:hover { border-color:rgba(255,255,255,0.2); color:#e1e3e4; }
+.chip-on { background:#9ad3b61a; border-color:#9ad3b644; color:#9ad3b6; font-weight:600; }
+.seg-toggle { }
+.seg-on { background:#9ad3b6; color:#003825; font-weight:700; }
+#leaderboard::-webkit-scrollbar { width:0; }
 </style>
   </main>
 </div>
