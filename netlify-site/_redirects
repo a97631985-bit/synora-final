@@ -1,0 +1,6 @@
+/login           https://synora-ai.onrender.com/login           302
+/signup          https://synora-ai.onrender.com/signup          302
+/features        https://synora-ai.onrender.com/features        302
+/methodology     https://synora-ai.onrender.com/methodology     302
+/dashboard       https://synora-ai.onrender.com/                302
+/app/*           https://synora-ai.onrender.com/:splat          302

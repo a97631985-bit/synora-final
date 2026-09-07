@@ -1,0 +1,6 @@
+[build]
+  publish = "netlify-site"
+
+# NOTE: Netlify supports static sites + JS/Go functions only.
+# The Synora Flask backend runs on Render (https://synora-ai.onrender.com).
+# This config publishes the marketing/landing site; the app pages redirect there.
