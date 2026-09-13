@@ -633,6 +633,73 @@ def _user_tasks_dicts(user):
 import statistics
 from collections import defaultdict, Counter
 
+
+def _energy_score(level):
+    """Map any energy label variant to a 0-1 score. Supports legacy (Low/Med/High)
+    and current (Low Energy/Active/Peak Focus) labels."""
+    return {"Peak Focus": 0.9, "High": 0.9, "Active": 0.6, "Med": 0.6, "Low Energy": 0.3, "Low": 0.3}.get(level, 0.6)
+
+
+def _research_circadian(hour, chronotype="Flexible"):
+    """Biphasic circadian alertness curve — mid-morning peak, afternoon dip, evening peak.
+    The individual phase dependency is demonstrated in van der Vinne et al., J. Biol. Rhythms
+    30(1):53-60, 2015: performance tracks each person's circadian phase. Chronotype shifts the
+    curve one way or the other so early/late learners get their peaks at their real times."""
+    base = {6: 0.5, 7: 0.62, 8: 0.75, 9: 0.9, 10: 1.0, 11: 0.98, 12: 0.92, 13: 0.8,
+            14: 0.72, 15: 0.78, 16: 0.92, 17: 1.02, 18: 0.98, 19: 0.9, 20: 0.82,
+            21: 0.72, 22: 0.62, 23: 0.52, 0: 0.45, 1: 0.4, 2: 0.36, 3: 0.34,
+            4: 0.36, 5: 0.42}.get(hour, 0.5)
+    morning_shift = {6: 0.06, 7: 0.07, 8: 0.08, 9: 0.07, 10: 0.05, 11: 0.04, 12: 0.0,
+                     13: -0.03, 14: -0.06, 15: -0.05, 16: -0.03, 17: -0.04, 18: -0.06,
+                     19: -0.07, 20: -0.06, 21: -0.04}
+    evening_shift = {6: -0.05, 7: -0.06, 8: -0.07, 9: -0.06, 10: -0.05, 11: -0.04,
+                     12: -0.02, 13: 0.0, 14: 0.02, 15: 0.04, 16: 0.06, 17: 0.07,
+                     18: 0.07, 19: 0.06, 20: 0.05, 21: 0.04}
+    if chronotype == "Morning":
+        adj = morning_shift
+    elif chronotype == "Evening":
+        adj = evening_shift
+    else:
+        adj = {}
+    return min(1.05, max(0.3, base + adj.get(hour, 0)))
+
+
+def _estimate_chronotype(user):
+    """Infer chronotype from the user's own energy reports: if high-energy check-ins cluster
+    before noon it's a Morning chronotype, if after 4PM it's Evening (Flexible otherwise)."""
+    ld = user.get("learning_data", {}) or {}
+    reports = ld.get("energy_reports", [])
+    if not reports:
+        return "Flexible"
+    morning_hits = evening_hits = total = 0
+    for r in reports:
+        if _energy_score(r.get("energy")) < 0.55:
+            continue
+        h = int(r.get("hour", 12))
+        if h < 12:
+            morning_hits += 1
+        elif h >= 16:
+            evening_hits += 1
+        total += 1
+    if total < 3:
+        return "Flexible"
+    mr = morning_hits / total
+    er = evening_hits / total
+    if mr >= 0.45 and mr > er * 1.5:
+        return "Morning"
+    if er >= 0.45 and er > mr * 1.5:
+        return "Evening"
+    return "Flexible"
+
+
+def _learning_days(ld):
+    """Number of distinct dates with energy data."""
+    dates = set()
+    for r in (ld or {}).get("energy_reports", []):
+        dates.add(r.get("date"))
+    return len(dates)
+
+
 def record_energy_report(user, hour, energy_level, source="manual"):
     """Record user's energy level at a specific hour"""
     ld = user.learning_data or {}
@@ -690,32 +757,44 @@ def analyze_user_patterns(user):
         return None  # Not enough data yet
     
     # ---- ENERGY MODEL: Hour -> average energy (0-1 scale) ----
-    energy_map = {"Low": 0.3, "Med": 0.6, "High": 0.9}
+    # Recent (last 7 days) reports weigh 2x — your rhythms now matter more than old data.
+    week_ago = (datetime.now() - timedelta(days=7)).strftime("%Y-%m-%d")
     hour_energy = defaultdict(list)
     
     for r in energy_reports:
-        hour_energy[r["hour"]].append(energy_map.get(r["energy"], 0.6))
+        w = 2.0 if r.get("date", "") >= week_ago else 1.0
+        hour_energy[r["hour"]].append((_energy_score(r.get("energy")), w))
     
     # Also infer from completions (completed tasks = energy was sufficient)
     for c in completions:
-        hour_energy[c["hour"]].append(energy_map.get(c["energy"], 0.6))
+        w = 2.0 if c.get("date", "") >= week_ago else 1.0
+        hour_energy[c["hour"]].append((_energy_score(c.get("energy")), w))
     
     # Focus sessions = high energy
     for f in focus_sessions:
         if isinstance(f, dict):
             h = f.get("start_hour") or (datetime.fromisoformat(f["date"]).hour if "T" in f.get("date", "") else 10)
-            hour_energy[h].append(0.85)
+            hour_energy[h].append((0.85, 1.0))
     
-    # Build model: hour -> avg energy (0-1)
+    # Build model: hour -> weighted avg energy (0-1); fallback to research circadian curve
     energy_model = {}
     for h in range(24):
         vals = hour_energy.get(h, [])
         if vals:
-            energy_model[h] = statistics.mean(vals)
+            tot = sum(v * w for v, w in vals)
+            wsum = sum(w for v, w in vals)
+            energy_model[h] = tot / wsum if wsum else _research_circadian(h)
         else:
-            # Fallback to circadian
-            circadian = {6:0.4,7:0.5,8:0.7,9:0.9,10:1.0,11:0.95,12:0.8,13:0.6,14:0.5,15:0.7,16:0.9,17:0.85,18:0.7,19:0.6,20:0.5,21:0.4,22:0.3}.get(h, 0.3)
-            energy_model[h] = circadian
+            energy_model[h] = _research_circadian(h)
+    
+    # ---- CHRONOTYPE + PREDICTION MATURITY ----
+    # Predictions become trustworthy after ~15 days of energy check-ins (the point at which
+    # the personal model reliably captures the user's real circadian phase).
+    chrono = _estimate_chronotype(user)
+    ld["chronotype"] = chrono
+    ld["data_days"] = len(unique_dates)
+    ld["prediction_ready"] = len(unique_dates) >= 15
+    ld["prediction_maturity"] = "mature" if len(unique_dates) >= 15 else "building"
     
     # ---- SLEEP/WAKE PATTERN ----
     wake_hours = []
@@ -802,13 +881,22 @@ def analyze_user_patterns(user):
 
 def get_personal_energy_curve(user, hour):
     """Get personalized energy for an hour (0-1 scale)"""
-    ld = user.get("learning_data", {})
+    ld = user.get("learning_data", {}) or {}
     model = ld.get("energy_model")
-    if model and hour in model:
-        return model[hour]
-    # Fallback to circadian
-    circadian = {6:0.4,7:0.5,8:0.7,9:0.9,10:1.0,11:0.95,12:0.8,13:0.6,14:0.5,15:0.7,16:0.9,17:0.85,18:0.7,19:0.6,20:0.5,21:0.4,22:0.3}.get(hour, 0.3)
-    return circadian
+    if model:
+        # JSON columns round-trip int keys to strings; normalize for lookups
+        mh = {int(k): v for k, v in model.items()}
+        if hour in mh:
+            return mh[hour]
+    # Fallback: research circadian curve, shifted by the user's chronotype
+    return _research_circadian(hour, ld.get("chronotype", "Flexible"))
+
+
+def _predict_hour_energy(user, hour):
+    """Personal-model hourly energy blended with current reported state (0.3-1.25 scale)."""
+    base = get_personal_energy_curve(user, hour)
+    mod = {"Low Energy": 0.85, "Active": 1.0, "Peak Focus": 1.15}.get(user.get("current_energy", "Active"), 1.0)
+    return min(1.25, max(0.3, base * mod))
 
 def get_personal_routine(user):
     """Get or generate personal routine"""
@@ -2112,9 +2200,17 @@ def api_reschedule():
     data = request.get_json(silent=True) or {}
     
     # User inputs
+    user = current_user()
     energy = data.get("current_energy")
     if energy in {"Low Energy", "Active", "Peak Focus"}:
-        current_user()["current_energy"] = energy
+        user["current_energy"] = energy
+        record_energy_report(user, datetime.now().hour, energy, source="reschedule")
+        # Keep the personal model fresh: rebuild whenever >=3 days of data exist
+        try:
+            if _learning_days(user.get("learning_data", {})) >= 3:
+                analyze_user_patterns(user)
+        except Exception:
+            pass
     
     wasted = 0
     try:
@@ -2125,7 +2221,6 @@ def api_reschedule():
     # Custom todo list from user (optional override)
     user_tasks_override = data.get("tasks")  # list of {name, duration, priority, preferred_start}
     
-    user = current_user()
     now = datetime.now().replace(second=0, microsecond=0)
     
     # Get incomplete tasks (use override if provided, else existing tasks)
@@ -2169,21 +2264,11 @@ def api_reschedule():
     rank = {"P1": 0, "P2": 1, "P3": 2, "P4": 3, "P5": 4}
     kept = sorted(remaining, key=lambda t: (rank.get(t.get("priority", "P3"), 2), t.get("start_time", "00:00")))
     
-    # AI PREDICTED ENERGY CURVE for the day (based on circadian rhythm + user's current energy)
+    # AI PREDICTED ENERGY CURVE for the day (personal circadian model + current state)
     def predict_energy_curve(current_energy, hours_from_now):
         """Returns energy multiplier 0.5-1.5 for each hour slot"""
-        hour = (datetime.now().hour + hours_from_now) % 24
-        # Base circadian rhythm (peaks at 10AM, 4PM; dips at 2PM, 10PM)
-        circadian = {
-            6: 0.6, 7: 0.7, 8: 0.9, 9: 1.1, 10: 1.2, 11: 1.15,
-            12: 0.9, 13: 0.75, 14: 0.65, 15: 0.8, 16: 1.1, 17: 1.05,
-            18: 0.9, 19: 0.8, 20: 0.7, 21: 0.6
-        }.get(hour, 0.5)
-        
-        # Current energy modifier
-        energy_mod = {"Low Energy": 0.85, "Active": 1.0, "Peak Focus": 1.15}.get(user.get("current_energy", "Active"), 1.0)
-        
-        return min(1.5, max(0.4, circadian * energy_mod))
+        hour = (datetime.now().hour + int(round(hours_from_now)) if hours_from_now >= 0 else 0) % 24
+        return _predict_hour_energy(user, hour)
     
     # Calculate demand
     demand = sum(
@@ -2203,15 +2288,14 @@ def api_reschedule():
                 dur = int((_hm_to_dt(t.get("end_time","23:59"), now) - _hm_to_dt(t.get("start_time","00:00"), now)).total_seconds() / 60)
                 task_lines.append(f'- id:{t["id"]} name:"{t["name"]}" priority:{t.get("priority","P3")} energy:{t.get("energy","Med")} duration:{dur}m orig:{t.get("start_time","?")}–{t.get("end_time","?")}')
             tasks_text = "\n".join(task_lines)
-            energy_curve_hint = "Energy curve (circadian peaks 10AM & 4PM, dip 2PM): "
+            energy_curve_hint = "Energy curve per hour (personal circadian model): "
             # quick energy per hour 06-22
             tmp_curve = []
             for h in range(start.hour, 22):
-                # simplified circadian
-                circadian = {6:0.6,7:0.7,8:0.9,9:1.1,10:1.2,11:1.15,12:0.9,13:0.75,14:0.65,15:0.8,16:1.1,17:1.05,18:0.9,19:0.8,20:0.7,21:0.6}.get(h,0.5)
-                emod = {"Low Energy":0.85,"Active":1.0,"Peak Focus":1.15}.get(user.get("current_energy","Active"),1.0)
-                tmp_curve.append(f"{h:02d}:00={round(circadian*emod,2)}")
+                tmp_curve.append(f"{h:02d}:00={round(_predict_hour_energy(user, h), 2)}")
             energy_curve_hint += ", ".join(tmp_curve)
+            _ld = user.get("learning_data", {}) or {}
+            chrono_hint = f"- Chronotype: {_ld.get('chronotype', 'Flexible')} (AI prediction maturity: {'mature — 15+ days of check-ins' if _ld.get('prediction_ready') else 'building — more check-ins sharpen it'})"
 
             prompt = f"""You are Synora, an expert productivity scheduler. Rebuild the user's remaining day as the MOST productive schedule.
 
@@ -2220,6 +2304,7 @@ Context:
 - Reschedule window: {start.strftime("%H:%M")} to 22:00 (available {int(available)} min)
 - Wasted minutes today: {wasted}
 - Current energy: {user.get("current_energy","Active")}
+{chrono_hint}
 - {energy_curve_hint}
 - Rule: P1=Power (deep work, needs peak energy), P2=Focus (needs high energy), P3=Quick Win, P4=Break, P5=Unproductive (cut first if short on time). Minimum task length 15 min.
 
@@ -2287,10 +2372,7 @@ If every task fits, dropped=[] and cuts=[].
                     zs_vals = []
                     cur = s_dt
                     while cur < e_dt:
-                        h = cur.hour
-                        circ = {6:0.6,7:0.7,8:0.9,9:1.1,10:1.2,11:1.15,12:0.9,13:0.75,14:0.65,15:0.8,16:1.1,17:1.05,18:0.9,19:0.8,20:0.7,21:0.6}.get(h,0.5)
-                        emod = {"Low Energy":0.85,"Active":1.0,"Peak Focus":1.15}.get(user.get("current_energy","Active"),1.0)
-                        zs_vals.append(min(1.5, max(0.4, circ*emod)))
+                        zs_vals.append(_predict_hour_energy(user, cur.hour))
                         cur += timedelta(minutes=15)
                     gemini_schedule.append({
                         "id": tid, "name": name_by_id[tid],
@@ -2358,7 +2440,7 @@ If every task fits, dropped=[] and cuts=[].
                         "wasted_minutes": wasted,
                         "current_energy": user.get("current_energy","Active"),
                         "schedule": sorted(gemini_schedule, key=lambda x: x["start_time"]),
-                        "energy_curve": [{"hour": h, "energy": round(min(1.5, max(0.4, {6:0.6,7:0.7,8:0.9,9:1.1,10:1.2,11:1.15,12:0.9,13:0.75,14:0.65,15:0.8,16:1.1,17:1.05,18:0.9,19:0.8,20:0.7,21:0.6}.get(h,0.5)*{"Low Energy":0.85,"Active":1.0,"Peak Focus":1.15}.get(user.get("current_energy","Active"),1.0))), 2)} for h in range(start.hour, 22)],
+                        "energy_curve": [{"hour": h, "energy": round(_predict_hour_energy(user, h), 2)} for h in range(start.hour, 22)],
                         "ai": True
                     })
         except Exception as _gem_e:
@@ -2803,7 +2885,10 @@ def api_predicted_energy():
         "hours": values, 
         "current_energy": ce,
         "personal_model_active": has_personal,
-        "data_days": len(set(r["date"] for r in user.get("learning_data", {}).get("energy_reports", [])))
+        "data_days": len(set(r["date"] for r in user.get("learning_data", {}).get("energy_reports", []))),
+        "chronotype": ld.get("chronotype", "Flexible"),
+        "prediction_ready": bool(ld.get("prediction_ready")),
+        "target_days": 15
     })
 
 
@@ -2811,7 +2896,20 @@ def api_predicted_energy():
 @login_required
 def api_energy_get():
     user = current_user()
-    return jsonify({"current_energy": user["current_energy"]})
+    ld = user.get("learning_data", {}) or {}
+    reports = ld.get("energy_reports", [])
+    today = datetime.now().strftime("%Y-%m-%d")
+    today_checkins = [r for r in reports if r.get("date") == today and r.get("source") == "checkin"]
+    last_checkin = today_checkins[-1] if today_checkins else None
+    return jsonify({
+        "current_energy": user["current_energy"],
+        "last_checkin": last_checkin.get("timestamp") if last_checkin else None,
+        "today_checkins": len(today_checkins),
+        "data_days": len({r.get("date") for r in reports}),
+        "chronotype": ld.get("chronotype", "Flexible"),
+        "prediction_ready": bool(ld.get("prediction_ready")),
+        "target_days": 15
+    })
 
 
 @app.route("/api/energy", methods=["POST"])
@@ -2824,7 +2922,49 @@ def api_energy_set():
         return jsonify({"error": "Invalid energy level."}), 400
     user = current_user()
     user["current_energy"] = level
-    return jsonify({"current_energy": level})
+    record_energy_report(user, datetime.now().hour, level, source="manual")
+    try:
+        if _learning_days(user.get("learning_data", {})) >= 3:
+            analyze_user_patterns(user)
+    except Exception:
+        pass
+    return jsonify({"current_energy": level, "recorded": True})
+
+
+@app.route("/api/energy/checkin", methods=["POST"])
+@login_required
+def api_energy_checkin():
+    """Daily 'How are you feeling?' check-in — the core data source for circadian prediction."""
+    data = request.get_json(silent=True) or {}
+    level = data.get("energy")
+    valid = {"Low Energy", "Active", "Peak Focus"}
+    if level not in valid:
+        return jsonify({"error": "Invalid energy level."}), 400
+    user = current_user()
+    now = datetime.now()
+    user["current_energy"] = level
+    record_energy_report(user, now.hour, level, source="checkin")
+    try:
+        if _learning_days(user.get("learning_data", {})) >= 3:
+            analyze_user_patterns(user)
+    except Exception:
+        pass
+    ld = user.get("learning_data", {}) or {}
+    reports = ld.get("energy_reports", [])
+    today = now.strftime("%Y-%m-%d")
+    today_checkins = [r for r in reports if r.get("date") == today and r.get("source") == "checkin"]
+    data_days = len({r.get("date") for r in reports})
+    prediction_ready = bool(ld.get("prediction_ready"))
+    return jsonify({
+        "ok": True,
+        "current_energy": level,
+        "today_checkins": len(today_checkins),
+        "data_days": data_days,
+        "chronotype": ld.get("chronotype", "Flexible"),
+        "prediction_ready": prediction_ready,
+        "target_days": 15,
+        "message": ("Check-in saved. AI is learning your rhythm — %d/15 days." % data_days) if not prediction_ready else "Model mature! Predictions now use your personal rhythm.",
+    })
 
 
 @app.route("/api/tasks", methods=["DELETE"])
@@ -2911,9 +3051,14 @@ def api_learning_report_energy():
     data = request.get_json(silent=True) or {}
     energy = data.get("energy")
     hour = data.get("hour", datetime.now().hour)
-    if energy not in ("Low", "Med", "High"):
+    if energy not in ("Low", "Med", "High", "Low Energy", "Active", "Peak Focus"):
         return jsonify({"error": "Invalid energy level"}), 400
     record_energy_report(user, hour, energy, source="manual")
+    try:
+        if _learning_days(user.get("learning_data", {})) >= 3:
+            analyze_user_patterns(user)
+    except Exception:
+        pass
     return jsonify({"ok": True, "message": f"Recorded {energy} energy at {hour}:00"})
 
 
@@ -3057,14 +3202,17 @@ def api_learning_status():
     user = current_user()
     ld = user.get("learning_data", {})
     reports = ld.get("energy_reports", [])
-    unique_dates = len(set(r["date"] for r in reports))
+    data_days = len(set(r["date"] for r in reports))
     return jsonify({
         "model_trained": bool(ld.get("energy_model")),
-        "days_of_data": len(set(r["date"] for r in reports)),
+        "days_of_data": data_days,
         "total_reports": len(reports),
         "routine_version": ld.get("routine_version", 0),
         "last_analyzed": ld.get("last_analyzed"),
-        "ready_for_routine": len(set(r["date"] for r in reports)) >= 3
+        "ready_for_routine": data_days >= 3,
+        "chronotype": ld.get("chronotype", "Flexible"),
+        "prediction_ready": bool(ld.get("prediction_ready")),
+        "target_days": 15
     })
 
 

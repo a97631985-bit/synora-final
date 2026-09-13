@@ -803,12 +803,13 @@ async function loadLearningStatus() {
       card.classList.remove("hidden");
       badge.textContent = "Model Trained ✓";
       badge.className = "text-[10px] font-bold px-2 py-1 rounded-full border bg-primary/20 text-primary border-primary/30";
-      hint.textContent = "Your personal model is active! " + d.days_of_data + " days of data, " + d.total_reports + " reports. Routine v" + d.routine_version + " ready.";
+      hint.textContent = "Personal rhythm: " + (d.chronotype || "Flexible") + " chronotype · " + d.days_of_data + "/15 days"
+        + (d.prediction_ready ? " — prediction mature ✓" : " — " + Math.max(0, 15 - d.days_of_data) + " more days for full prediction");
     } else {
       card.classList.remove("hidden");
-      badge.textContent = "Learning... " + d.days_of_data + "/3 days";
+      badge.textContent = "Learning... " + d.days_of_data + "/15 days";
       badge.className = "text-[10px] font-bold px-2 py-1 rounded-full border bg-tertiary/20 text-tertiary border-tertiary/30";
-      hint.textContent = "Complete tasks and report energy. " + (3 - d.days_of_data) + " more days needed for personal routine.";
+      hint.textContent = "Complete tasks and check in with energy (" + (d.chronotype || "Flexible") + " detected). " + Math.max(0, 15 - d.days_of_data) + " more days needed for personal prediction.";
     }
     if (d.ready_for_routine && !d.model_trained) {
       hint.textContent += " Routine will generate automatically soon!";
@@ -952,6 +953,70 @@ async function applyRoutineToToday() {
     }
   } catch (e) {}
 }
+
+/* ========== ENERGY CHECK-IN (circadian learning) ========== */
+var checkinShownSession = false;
+
+function maybeShowCheckIn() {
+  if (checkinShownSession) return;
+  checkinShownSession = true;
+  var modal = document.getElementById("checkinModal");
+  if (!modal) return;
+  fetch("/api/energy")
+    .then(function (r) { return r.json(); })
+    .then(function (d) {
+      if ((d.today_checkins || 0) >= 3) return;
+      var last = d.last_checkin ? new Date(d.last_checkin) : null;
+      if (last && (Date.now() - last.getTime()) < 4 * 3600 * 1000) return;
+      var days = d.data_days || 0;
+      var statusEl = document.getElementById("checkinStatusText");
+      if (statusEl) {
+        statusEl.textContent = d.prediction_ready
+          ? "Prediction is mature — Synora schedules to YOUR rhythm (" + (d.chronotype || "Flexible") + " chronotype). Keep checking in!"
+          : "Day " + days + "/15 — each check-in teaches Synora your personal energy rhythm.";
+      }
+      modal.classList.remove("hidden");
+    })
+    .catch(function () {});
+}
+
+function submitCheckin(level) {
+  var modal = document.getElementById("checkinModal");
+  if (!modal) return;
+  fetch("/api/energy/checkin", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ energy: level })
+  }).then(function (r) { return r.json(); }).then(function (d) {
+    modal.classList.add("hidden");
+    loadPredictedEnergy();
+    loadLearningStatus();
+    loadPersonalEnergyCurve();
+    var toast = document.getElementById("healToast");
+    if (toast) {
+      document.getElementById("healToastText").textContent = d.message || ("Check-in saved: " + level + ". Thanks!");
+      toast.classList.remove("hidden");
+      setTimeout(function () { toast.classList.add("hidden"); }, 3500);
+    }
+  }).catch(function () {
+    modal.classList.add("hidden");
+  });
+}
+
+document.addEventListener("DOMContentLoaded", function () {
+  var checkinModal = document.getElementById("checkinModal");
+  if (checkinModal) {
+    checkinModal.querySelectorAll(".checkin-option").forEach(function (btn) {
+      btn.addEventListener("click", function () { submitCheckin(btn.dataset.energy); });
+    });
+    document.getElementById("checkinCloseBtn").addEventListener("click", function () {
+      checkinModal.classList.add("hidden");
+    });
+    var backdrop = checkinModal.querySelector(".absolute.inset-0");
+    if (backdrop) backdrop.addEventListener("click", function () { checkinModal.classList.add("hidden"); });
+    setTimeout(maybeShowCheckIn, 1000);
+  }
+});
 
 document.addEventListener("DOMContentLoaded", function () {
   var ws = document.getElementById("welcomeSection");
@@ -1154,6 +1219,45 @@ document.addEventListener("DOMContentLoaded", function () {
         <span class="material-symbols-outlined" style="font-variation-settings: 'FILL' 1;">save</span>
         Save Changes
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== Energy Check-in Modal ==================== -->
+<div id="checkinModal" class="hidden fixed inset-0 z-[120] flex items-center justify-center p-4">
+  <div class="absolute inset-0 bg-black/70 backdrop-blur-sm"></div>
+  <div class="relative w-full max-w-md glass-strong rounded-3xl p-6 shadow-2xl border border-white/10 overflow-hidden">
+    <div class="absolute -top-20 -right-20 w-48 h-48 bg-tertiary/10 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="absolute -bottom-24 -left-20 w-48 h-48 bg-primary/10 rounded-full blur-3xl pointer-events-none"></div>
+    <div class="relative z-10">
+      <div class="flex items-center justify-between mb-1">
+        <h3 class="text-xl font-bold flex items-center gap-2">
+          <span class="material-symbols-outlined text-tertiary" style="font-variation-settings: 'FILL' 1;">neurology</span>
+          Energy Check-in
+        </h3>
+        <button id="checkinCloseBtn" class="w-9 h-9 rounded-full flex items-center justify-center text-on-surface-variant hover:bg-white/10 hover:text-on-surface transition-all">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <p class="text-sm text-on-surface-variant mb-1">Hello {{ session.get('username') or 'friend' }}, how are you feeling right now?</p>
+      <p class="text-[11px] text-on-surface-variant/70 mb-5">30 seconds once in a while — every check-in teaches Synora your personal energy rhythm so it can schedule your hardest work at the hours when you're actually strong.</p>
+
+      <div id="checkinOptions" class="grid grid-cols-3 gap-2 mb-5">
+        <button type="button" data-energy="Low Energy" class="checkin-option px-2 py-4 rounded-xl border border-white/10 text-on-surface-variant text-xs font-semibold transition-all flex flex-col items-center gap-1.5 hover:border-white/25 hover:bg-white/5 cursor-pointer">
+          <span class="text-2xl">🌱</span> Low Energy
+        </button>
+        <button type="button" data-energy="Active" class="checkin-option px-2 py-4 rounded-xl border border-primary/30 text-on-surface text-xs font-semibold transition-all flex flex-col items-center gap-1.5 bg-primary/10 hover:border-primary/60 hover:bg-primary/15 cursor-pointer">
+          <span class="text-2xl">⚡</span> Active
+        </button>
+        <button type="button" data-energy="Peak Focus" class="checkin-option px-2 py-4 rounded-xl border border-white/10 text-on-surface-variant text-xs font-semibold transition-all flex flex-col items-center gap-1.5 hover:border-white/25 hover:bg-white/5 cursor-pointer">
+          <span class="text-2xl">🔥</span> Peak Focus
+        </button>
+      </div>
+
+      <div id="checkinStatus" class="flex items-center gap-2 text-[11px] text-on-surface-variant/70">
+        <span class="material-symbols-outlined text-[16px]">insights</span>
+        <span id="checkinStatusText">Learning your rhythm…</span>
+      </div>
     </div>
   </div>
 </div>
