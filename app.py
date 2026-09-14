@@ -2398,6 +2398,8 @@ If every task fits, dropped=[] and cuts=[].
                     if "before" not in c and c.get("name") in name_by_id.values():
                         tid2 = next((k for k,v in name_by_id.items() if v==c["name"]), None)
                         if tid2: c["before"] = orig_dur_by_id.get(tid2, 0)
+                # keep only cuts that actually saved time (Gemini sometimes reports zero-change 'cuts')
+                gemini_cuts = [c for c in gemini_cuts if c.get("before", 0) > c.get("after", 0)]
                 # If Gemini succeeded, persist and return immediately
                 if gemini_schedule:
                     dropped_id_set = set(name_by_id[k] for k in dropped_ids)  # name set for filtering
@@ -2613,16 +2615,26 @@ If every task fits, dropped=[] and cuts=[].
         is_work = t_obj is not None and rank.get(t_obj.get("priority", "P3"), 2) <= 1
         orig_zone = zone_energy(s, e)
         cand = max(start, prev_end)
-        while cand + timedelta(minutes=dur) <= e:
+        chosen = None
+        # Compact earliest-possible without overlapping; a task may slide past its
+        # original end (but never beyond window_end) so it can never overlap.
+        while cand <= window_end:
             ce = cand + timedelta(minutes=dur)
+            if ce > window_end:
+                break
             if fits(cand, ce):
-                # work tasks never slide into notably weaker energy zones
-                if is_work and zone_energy(cand, ce) + 0.15 < orig_zone:
+                # Work tasks must not move into a notably weaker energy zone
+                # when sliding EARLIER than their energy-matched placement.
+                if is_work and cand < s and zone_energy(cand, ce) + 0.15 < orig_zone:
                     cand += timedelta(minutes=15)
                     continue
-                s, e = cand, ce
+                chosen = (cand, ce)
                 break
             cand += timedelta(minutes=15)
+        if chosen is None:
+            # Safety net: keep original placement (can't fit anywhere compact).
+            chosen = (s, e)
+        s, e = chosen
         occupied.append((s, e))
         prev_end = e
         placed[tid] = (s, e, dur)
