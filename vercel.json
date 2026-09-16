@@ -1,0 +1,19 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "functions": {
+    "app.py": {
+      "maxDuration": 60,
+      "memory": 1024,
+      "excludeFiles": [
+        "netlify-site/**",
+        "OOS-AQUA/**",
+        "wedding-orders-app/**",
+        "pradeep-cards-site/**",
+        "instance/**",
+        "__pycache__/**",
+        "test*.*",
+        "*.pyc"
+      ]
+    }
+  }
+}

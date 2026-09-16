@@ -27,6 +27,8 @@ app = Flask(__name__)
 # SECURITY: always set SYNORA_SECRET to a long random value in production!
 # The fallback below is ONLY for local dev — never rely on it in a live deploy.
 app.secret_key = os.environ.get("SYNORA_SECRET") or os.urandom(32).hex()
+if not os.environ.get("SYNORA_SECRET") and (os.environ.get("DATABASE_URL") or os.environ.get("VERCEL")):
+    print("WARNING: SYNORA_SECRET not set — sessions will break across cold starts. Set a long random value on Vercel!")
 # Session/cookie hardening
 app.config["SESSION_COOKIE_HTTPONLY"] = True
 app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
@@ -169,6 +171,14 @@ if not db_url:
     db_url = "sqlite:///" + os.path.join(app.instance_path, "synora.db")
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+# Serverless (Vercel) tuning — short-lived function instances must not keep
+# persistent Postgres connection pools (prevents connection blow-up + stale conns).
+if os.environ.get("SYNORA_SERVERLESS") == "1":
+    from sqlalchemy.pool import NullPool
+    app.config["SQLALCHEMY_ENGINE_OPTIONS"] = {
+        "pool_pre_ping": True,
+        "poolclass": NullPool,
+    }
 db = SQLAlchemy(app)
 
 # Gemini Configuration
@@ -528,8 +538,8 @@ with app.app_context():
     # on existing tables. Add new columns here when the model evolves so
     # existing SQLite/Postgres DBs get patched + backfilled automatically.
     # (Keeps zero-dependency deploys simple until a full Alembic setup.)
+    from sqlalchemy import inspect as sa_inspect, text
     def _ensure_column(table, column, ddl):
-        from sqlalchemy import inspect as sa_inspect, text
         insp = sa_inspect(db.engine)
         if column not in [c["name"] for c in insp.get_columns(table)]:
             with db.engine.begin() as conn:
