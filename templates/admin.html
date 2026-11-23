@@ -3,10 +3,21 @@
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Synora Admin</title>
+<script>
+  (function () {
+    try {
+      var t = localStorage.getItem("synora-theme");
+      if (t !== "light") t = "dark";
+      document.documentElement.classList.toggle("dark", t === "dark");
+      document.documentElement.style.colorScheme = t;
+    } catch (e) {}
+  })();
+</script>
 <style>
   :root { color-scheme: dark; }
+  html:not(.dark) { color-scheme: light; }
   * { box-sizing: border-box; }
-  body { margin:0; background:#0d0f10; color:#e1e3e4; font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; }
+  body { margin:0; background:#0d0f10; color:#e1e3e4; font-family:system-ui,-apple-system,'Segoe UI',Roboto,sans-serif; transition:background-color .25s ease, color .25s ease; }
   .wrap { max-width:1100px; margin:0 auto; padding:24px; }
   .top { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:16px; margin-bottom:20px; }
   h1 { color:#9ad3b6; margin:0; font-size:24px; }
@@ -50,6 +61,49 @@
   .toast { position:fixed; bottom:20px; right:20px; background:#222728; border:1px solid #9ad3b644; color:#e1e3e4; padding:12px 18px; border-radius:12px; font-size:13px; opacity:0; transition:opacity .3s; box-shadow:0 8px 24px rgba(0,0,0,.4); z-index:50; }
   .toast.show { opacity:1; }
   @media (max-width:640px){ .wrap{padding:14px} thead{display:none} tbody td{display:block;border:none;padding:6px 14px} tbody td:first-child{border-top:1px solid rgba(255,255,255,.08);padding-top:10px} tbody tr{border-bottom:1px solid rgba(255,255,255,.06)} }
+
+  /* ---------- Light mode ---------- */
+  html:not(.dark) body { background:#f5f8f5; color:#181d1a; }
+  html:not(.dark) h1 { color:#0f6b4a; }
+  html:not(.dark) .sub,
+  html:not(.dark) .muted,
+  html:not(.dark) .empty,
+  html:not(.dark) .pager span,
+  html:not(.dark) .pager button { color:#55605a; }
+  html:not(.dark) .stat .l { color:#55605a; }
+  html:not(.dark) .stat .n { color:#0f6b4a; }
+  html:not(.dark) .logout-btn { border-color:rgba(15,40,28,.16); color:#26302b; }
+  html:not(.dark) .logout-btn:hover { background:rgba(15,40,28,.05); }
+  html:not(.dark) .stat,
+  html:not(.dark) .card,
+  html:not(.dark) .seg { background:#ffffff; border-color:rgba(15,40,28,.1); }
+  html:not(.dark) .search { background:#ffffff; border-color:rgba(15,40,28,.18); color:#181d1a; }
+  html:not(.dark) .search:focus { border-color:#0f6b4a; }
+  html:not(.dark) .seg button { color:#55605a; }
+  html:not(.dark) .seg button.on { background:#0f6b4a; color:#ffffff; }
+  html:not(.dark) thead th { background:rgba(15,107,74,.08); color:#2b4a3c; }
+  html:not(.dark) tbody td { border-top-color:rgba(15,40,28,.08); }
+  html:not(.dark) tbody tr:hover { background:rgba(15,40,28,.03); }
+  html:not(.dark) .pill { border-color:rgba(15,40,28,.14); }
+  html:not(.dark) .pill.good { background:rgba(15,107,74,.1); border-color:rgba(15,107,74,.3); color:#0f6b4a; }
+  html:not(.dark) .pill.bad { background:rgba(186,26,26,.08); border-color:rgba(186,26,26,.25); color:#b91c1c; }
+  html:not(.dark) .pill.warn { background:rgba(161,98,7,.1); border-color:rgba(161,98,7,.28); color:#a16207; }
+  html:not(.dark) .btn { border-color:rgba(15,40,28,.16); color:#26302b; }
+  html:not(.dark) .btn:hover { background:rgba(15,40,28,.05); }
+  html:not(.dark) .btn.danger { color:#b91c1c; border-color:rgba(186,26,26,.3); }
+  html:not(.dark) .btn.danger:hover { background:rgba(186,26,26,.08); }
+  html:not(.dark) .btn.ok { color:#0f6b4a; border-color:rgba(15,107,74,.3); }
+  html:not(.dark) .btn.ok:hover { background:rgba(15,107,74,.08); }
+  html:not(.dark) .pager button { border-color:rgba(15,40,28,.16); color:#26302b; }
+  html:not(.dark) .toast { background:#ffffff; border-color:rgba(15,107,74,.3); color:#181d1a; box-shadow:0 8px 24px rgba(15,40,28,.12); }
+  html:not(.dark) tbody td:first-child { border-top-color:rgba(15,40,28,.08); }
+  html:not(.dark) tbody tr { border-bottom-color:rgba(15,40,28,.08); }
+  html:not(.dark) [style*="border-color:#ffd16644"] { border-color:rgba(161,98,7,.3) !important; }
+  html:not(.dark) [style*="color:#ffd166"] { color:#a16207 !important; }
+  html:not(.dark) [style*="rgba(255,255,255,0.06)"],
+  html:not(.dark) [style*="rgba(255,255,255,.06)"],
+  html:not(.dark) [style*="rgba(255,255,255,0.08)"],
+  html:not(.dark) [style*="rgba(255,255,255,.08)"] { border-color:rgba(15,40,28,.09) !important; }
 </style>
 </head>
 <body>
@@ -60,6 +114,7 @@
       <div class="sub">User database • {{ total }} users • {% if active_count is defined %}{{ active_count }} active{% endif %}</div>
     </div>
     <a href="/admin?key={{ key }}#table" class="logout-btn">↻ Refresh</a>
+    <button type="button" id="themeBtn" class="logout-btn">🌙 Dark mode</button>
   </div>
 
   <div class="stats">
@@ -273,5 +328,23 @@ repWrap.addEventListener('click', e=>{
     .then(r=>r.json()).then(res=>{ if(res.ok){ toast(action==='hide'?'Post hidden':'Report dismissed'); reloadAdminFeedback(); } else toast(res.error||'Failed'); });
 });
 reloadAdminFeedback();
+</script>
+<script>
+(function () {
+  var btn = document.getElementById("themeBtn");
+  function render() {
+    var dark = document.documentElement.classList.contains("dark");
+    btn.textContent = dark ? "☀ Light mode" : "🌙 Dark mode";
+    btn.title = dark ? "Switch to light mode" : "Switch to dark mode";
+  }
+  btn.addEventListener("click", function () {
+    var next = document.documentElement.classList.contains("dark") ? "light" : "dark";
+    document.documentElement.classList.toggle("dark", next === "dark");
+    document.documentElement.style.colorScheme = next;
+    try { localStorage.setItem("synora-theme", next); } catch (e) {}
+    render();
+  });
+  render();
+})();
 </script>
 </body></html>

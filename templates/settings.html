@@ -106,7 +106,7 @@
           <div class="flex items-center justify-between gap-4">
             <div class="flex-1">
               <h4 class="text-sm font-semibold mb-1">Dark Mode</h4>
-              <p class="text-sm text-on-surface-variant leading-snug">Deep forest theme for late-night study sessions.</p>
+              <p class="text-sm text-on-surface-variant leading-snug">Deep forest theme for late-night study sessions. Switch off for a bright daylight theme.</p>
             </div>
             <label class="relative inline-flex items-center cursor-pointer shrink-0">
               <input type="checkbox" class="sr-only peer" data-theme-toggle-checkbox checked>
@@ -158,21 +158,8 @@
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
-  /* Wire the settings checkbox to the SAME theme logic as the sidebar */
-  var themeCheckbox = document.querySelector('[data-theme-toggle-checkbox]');
-  function syncCheckbox() {
-    themeCheckbox.checked = document.documentElement.classList.contains("dark");
-  }
-  syncCheckbox();
-  themeCheckbox.addEventListener("change", function () {
-    var next = themeCheckbox.checked ? "dark" : "light";
-    document.documentElement.classList.toggle("dark", next === "dark");
-    document.documentElement.style.colorScheme = next;
-    localStorage.setItem("synora-theme", next);
-    syncCheckbox();
-    var sidebarToggle = document.querySelector('[data-theme-toggle-btn]');
-    if (sidebarToggle) sidebarToggle.click(); /* keep both in sync */
-  });
+  /* The appearance switch uses the global controller from head.html,
+     which also keeps the sidebar toggle in sync. */
 
   /* Persist preference toggles */
   document.querySelectorAll(".setting-toggle").forEach(function (cb) {

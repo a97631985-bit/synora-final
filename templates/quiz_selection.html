@@ -402,7 +402,10 @@ document.addEventListener("DOMContentLoaded", function () {
     var el = document.getElementById("generateStatus");
     el.textContent = msg;
     el.classList.remove("hidden");
-    el.style.color = isError ? "#ffb4ab" : "#9ad3b6";
+    var dark = !window.SynoraTheme || window.SynoraTheme.isDark();
+    el.style.color = isError
+      ? (dark ? "#ffb4ab" : "#b91c1c")
+      : (dark ? "#9ad3b6" : "#0f6b4a");
   }
 });
 </script>

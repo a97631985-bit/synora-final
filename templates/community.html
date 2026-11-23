@@ -3,6 +3,8 @@
 <head>{% include "head.html" %}</head>
 <body class="bg-background text-on-surface antialiased min-h-screen selection:bg-primary-container selection:text-on-primary-container">
 <div class="ambient-bg"></div>
+<!-- Shared file input for media uploads (must exist before the scripts below run) -->
+<input type="file" id="mediaFileInput" class="hidden" accept="image/*,video/*" multiple>
 {% include "sidebar.html" %}
 
 <div class="md:ml-64 min-h-screen flex flex-col relative">
@@ -196,6 +198,17 @@
         <button type="button" id="submitFeedbackBtn" class="btn-primary flex-1" disabled>Submit</button>
       </div>
     </div>
+  </div>
+</div>
+
+<!-- Lightbox for viewing community media (declared before scripts that bind to it) -->
+<div id="lightbox" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/85 backdrop-blur-sm">
+  <button type="button" class="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10" onclick="closeLightbox()" aria-label="Close"><span class="material-symbols-outlined">close</span></button>
+  <button type="button" class="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10" onclick="lbStep(-1)" aria-label="Previous"><span class="material-symbols-outlined">chevron_left</span></button>
+  <button type="button" class="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10" onclick="lbStep(1)" aria-label="Next"><span class="material-symbols-outlined">chevron_right</span></button>
+  <div class="max-h-[90vh] max-w-[90vw] px-12 py-4">
+    <img id="lightboxImg" src="" alt="" class="max-h-[80vh] max-w-full rounded-xl object-contain shadow-2xl mx-auto" style="animation: lbIn .25s ease">
+    <div id="lightboxCaption" class="text-center text-on-surface-variant text-sm mt-3"></div>
   </div>
 </div>
 
@@ -962,17 +975,5 @@ input[type="text"].comment-input::placeholder { color: #8a938c; }
   </main>
 </div>
 
-<!-- Shared file input for media uploads (both composers) -->
-<input type="file" id="mediaFileInput" class="hidden" accept="image/*,video/*" multiple>
-
-<!-- Lightbox for viewing community media -->
-<div id="lightbox" class="fixed inset-0 z-[100] hidden items-center justify-center bg-black/85 backdrop-blur-sm">
-  <button type="button" class="absolute top-4 right-4 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10" onclick="closeLightbox()" aria-label="Close"><span class="material-symbols-outlined">close</span></button>
-  <button type="button" class="absolute left-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10" onclick="lbStep(-1)" aria-label="Previous"><span class="material-symbols-outlined">chevron_left</span></button>
-  <button type="button" class="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-full bg-white/10 text-white hover:bg-white/20 transition-colors z-10" onclick="lbStep(1)" aria-label="Next"><span class="material-symbols-outlined">chevron_right</span></button>
-  <div class="max-h-[90vh] max-w-[90vw] px-12 py-4">
-    <img id="lightboxImg" src="" alt="" class="max-h-[80vh] max-w-full rounded-xl object-contain shadow-2xl mx-auto" style="animation: lbIn .25s ease">
-    <div id="lightboxCaption" class="text-center text-on-surface-variant text-sm mt-3"></div>
-  </div>
-</div>
+<!-- Shared file input and lightbox are declared earlier so scripts can bind to them. -->
 </body></html>
