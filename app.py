@@ -190,16 +190,31 @@ db = SQLAlchemy(app)
 
 # Gemini Configuration
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-if GEMINI_API_KEY and GEMINI_AVAILABLE:
+# The alias used previously is not available in every API version / project.
+# Keep a short candidate list and rotate when the API reports a missing model.
+GEMINI_MODEL_NAMES = [n for n in [
+    os.environ.get("GEMINI_MODEL", ""),
+    "gemini-flash-lite-latest",
+    "gemini-2.5-flash-lite",
+    "gemini-2.0-flash",
+    "gemini-1.5-flash",
+] if n]
+GEMINI_MODEL_INDEX = 0
+GEMINI_MODEL_LOCK = threading.Lock()
+# The AI planner is opt-in: the offline planner is fast and always works,
+# while model calls can hang or fail in restricted hosting environments.
+AI_PLANNER_ENABLED = os.environ.get("SYNORA_USE_AI_PLANNER", "0") == "1"
+if GEMINI_API_KEY and GEMINI_AVAILABLE and GEMINI_MODEL_NAMES:
     genai.configure(api_key=GEMINI_API_KEY)
-    GEMINI_MODEL = genai.GenerativeModel("gemini-flash-lite-latest")
+    GEMINI_MODEL = genai.GenerativeModel(GEMINI_MODEL_NAMES[0])
 else:
     GEMINI_MODEL = None
 
 
 def _gemini_generate(prompt, attempts=3):
-    """Generate content with retry/backoff for transient errors (429/503)."""
+    """Generate content with retry/backoff and model-name fallback."""
     import time
+    global GEMINI_MODEL, GEMINI_MODEL_INDEX
     delay = 4
     last_err = None
     for i in range(attempts):
@@ -207,13 +222,75 @@ def _gemini_generate(prompt, attempts=3):
             return GEMINI_MODEL.generate_content(prompt)
         except Exception as e:
             msg = str(e)
-            if "429" in msg or "503" in msg or "quota" in msg.lower() or "overloaded" in msg.lower():
+            lower = msg.lower()
+            if "not found" in lower or "404" in msg:
+                with GEMINI_MODEL_LOCK:
+                    if GEMINI_MODEL_INDEX < len(GEMINI_MODEL_NAMES) - 1:
+                        GEMINI_MODEL_INDEX += 1
+                        GEMINI_MODEL = genai.GenerativeModel(
+                            GEMINI_MODEL_NAMES[GEMINI_MODEL_INDEX]
+                        )
+                        continue
+            if "429" in msg or "503" in msg or "quota" in lower or "overloaded" in lower:
                 last_err = e
                 time.sleep(delay)
                 delay *= 2
                 continue
             raise
     raise last_err
+
+
+def _clean_syllabus_topics(syllabus, exam, subject):
+    """Turn pasted/parsed syllabus lines into clean topic labels."""
+    topics = []
+    for raw in (syllabus or "").splitlines():
+        line = raw.strip()
+        line = _re.sub(r"^\s*(?:[-*\u2022]|\d+[.)]|[A-Za-z]\.)\s*", "", line).strip()
+        if len(line) < 3:
+            continue
+        topics.append(line[:120])
+    if subject:
+        focused = [t for t in topics if subject.lower() in t.lower()]
+        if len(focused) >= 2:
+            topics = focused
+    if not topics:
+        topics = [f"{subject or exam} core concepts"]
+    return topics[:200]
+
+
+def _build_offline_plan_days(topics, start_date, days, daily_hours):
+    """Deterministic day-wise plan used when Gemini is unavailable or fails."""
+    if not topics:
+        topics = ["Core concepts"]
+    total = max(60, min(480, int(daily_hours) * 60))
+    plan_days = []
+    count = len(topics)
+    for i in range(days):
+        day = start_date + timedelta(days=i)
+        if i > 0 and i % 7 == 6:
+            names = [
+                f"Revision: {topics[(i - 1) % count]}",
+                f"Practice problems: {topics[i % count]}",
+            ]
+            priorities = ["P3", "P2"]
+        else:
+            names = [topics[i % count]]
+            priorities = ["P1" if i % 3 == 0 else "P2"]
+            if total >= 180:
+                names.append(f"Practice: {topics[(i + 1) % count]}")
+                priorities.append("P2")
+        if len(names) == 1:
+            durations = [min(240, total)]
+        else:
+            first = min(240, int(total * 0.6))
+            durations = [first, min(240, max(30, total - first))]
+        tasks = [
+            {"name": names[j], "duration": durations[j], "priority": priorities[j]}
+            for j in range(len(names))
+        ]
+        plan_days.append({"date": day.isoformat(), "tasks": tasks})
+    return plan_days
+
 
 # ---------------------------------------------------------------------------
 # Database Models — persistent storage for every user
@@ -1722,8 +1799,9 @@ def api_syllabus_parse_pdf():
         if not text or len(text) < 30:
             return jsonify({"error": "Could not extract text from PDF. Try a text-based PDF."}), 400
         raw_text = text[:8000]
-        # Ask Gemini to intelligently read and structure the syllabus
-        if GEMINI_MODEL and raw_text:
+        # Ask Gemini to intelligently read and structure the syllabus only
+        # when explicitly enabled; otherwise use the fast offline extractor.
+        if AI_PLANNER_ENABLED and GEMINI_MODEL and raw_text:
             subj_line = f'Focus ONLY on subject "{subject_filter}" — extract only topics for this subject. Ignore other subjects.' if subject_filter else 'Extract all topics grouped by subject.'
             prompt = f"""
 You are an expert syllabus analyzer for {exam or "General Exam"}.
@@ -1765,22 +1843,15 @@ Rules: Plain ASCII, no LaTeX, no backslashes, topics concise (3-8 words each), m
                     "full_cleaned": full_cleaned,
                     "subjects_found": subjects_found
                 })
-            except Exception as e:
-                # Fallback: return raw text as syllabus
-                return jsonify({
-                    "extracted_length": len(text),
-                    "raw_preview": raw_text[:600],
-                    "topics": [l.strip() for l in raw_text.split("\n") if len(l.strip())>3][:20],
-                    "syllabus_text": raw_text[:2000],
-                    "full_cleaned": raw_text[:600],
-                    "subjects_found": []
-                })
+            except Exception:
+                pass  # fall through to the offline extractor below
+        topics = _clean_syllabus_topics(text[:2000], exam or "General Exam", subject_filter)
         return jsonify({
             "extracted_length": len(text),
-            "raw_preview": raw_text[:600] if 'raw_text' in locals() else text[:600],
-            "topics": [l.strip() for l in text.split("\n") if len(l.strip())>3][:20],
-            "syllabus_text": text[:2000],
-            "full_cleaned": text[:600],
+            "raw_preview": raw_text[:600],
+            "topics": topics,
+            "syllabus_text": "\n".join(topics),
+            "full_cleaned": "; ".join(topics)[:400],
             "subjects_found": []
         })
     except Exception as e:
@@ -1790,8 +1861,6 @@ Rules: Plain ASCII, no LaTeX, no backslashes, topics concise (3-8 words each), m
 @app.route("/api/syllabus/generate", methods=["POST"])
 @login_required
 def api_syllabus_generate():
-    if not GEMINI_MODEL:
-        return jsonify({"error": "AI model not configured."}), 503
     data = request.get_json(silent=True) or {}
     exam = (data.get("exam") or "").strip()
     syllabus = (data.get("syllabus") or "").strip()
@@ -1850,50 +1919,59 @@ Rules:
     plan_id = str(uuid.uuid4())
     created_tasks = []
 
-    # === CHUNKED GENERATION: batches run in PARALLEL so long plans stay fast ===
-    from concurrent.futures import ThreadPoolExecutor
-    BATCH = 40
-    batch_ranges = []
-    bs = today + timedelta(days=1)
-    while bs <= min(today + timedelta(days=gen_days), exam_date):
-        be = min(bs + timedelta(days=BATCH - 1), min(today + timedelta(days=gen_days), exam_date))
-        batch_ranges.append((bs, be))
-        bs = be + timedelta(days=1)
-    total_batches = len(batch_ranges)
+    plan_days_all = []
 
-    def gen_batch(args):
-        bi, (b_start, b_end) = args
-        prompt = build_batch_prompt(b_start, b_end, bi + 1, total_batches)
-        for attempt in range(2):  # one retry per batch
-            try:
-                resp = _gemini_generate(prompt)
-                txt = resp.text.strip()
-                if "```" in txt:
+    if AI_PLANNER_ENABLED and GEMINI_MODEL:
+        # === CHUNKED GENERATION: batches run in PARALLEL so long plans stay fast ===
+        from concurrent.futures import ThreadPoolExecutor
+        BATCH = 40
+        batch_ranges = []
+        bs = today + timedelta(days=1)
+        while bs <= min(today + timedelta(days=gen_days), exam_date):
+            be = min(bs + timedelta(days=BATCH - 1), min(today + timedelta(days=gen_days), exam_date))
+            batch_ranges.append((bs, be))
+            bs = be + timedelta(days=1)
+        total_batches = len(batch_ranges)
+
+        def gen_batch(args):
+            bi, (b_start, b_end) = args
+            prompt = build_batch_prompt(b_start, b_end, bi + 1, total_batches)
+            for attempt in range(2):  # one retry per batch
+                try:
+                    resp = _gemini_generate(prompt)
+                    txt = resp.text.strip()
+                    if "```" in txt:
+                        si, ei = txt.find("["), txt.rfind("]")
+                        if si != -1 and ei != -1:
+                            txt = txt[si:ei+1]
                     si, ei = txt.find("["), txt.rfind("]")
                     if si != -1 and ei != -1:
                         txt = txt[si:ei+1]
-                si, ei = txt.find("["), txt.rfind("]")
-                if si != -1 and ei != -1:
-                    txt = txt[si:ei+1]
-                try:
-                    days = json.loads(txt)
-                except json.JSONDecodeError:
-                    import re
-                    fixed = re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', txt)
-                    days = json.loads(fixed)
-                if isinstance(days, list):
-                    return days
-            except Exception:
-                if attempt == 1:
-                    return []
-        return []
+                    try:
+                        days = json.loads(txt)
+                    except json.JSONDecodeError:
+                        fixed = _re.sub(r'\\(?!["\\/bfnrtu])', r'\\\\', txt)
+                        days = json.loads(fixed)
+                    if isinstance(days, list):
+                        return days
+                except Exception:
+                    if attempt == 1:
+                        return []
+            return []
 
-    with ThreadPoolExecutor(max_workers=min(3, total_batches)) as pool:
-        results = list(pool.map(gen_batch, enumerate(batch_ranges)))
+        if total_batches:
+            with ThreadPoolExecutor(max_workers=min(3, total_batches)) as pool:
+                results = list(pool.map(gen_batch, enumerate(batch_ranges)))
+            for chunk in results:
+                plan_days_all.extend(chunk)
 
-    plan_days_all = []
-    for chunk in results:
-        plan_days_all.extend(chunk)
+    # If the AI is missing, misconfigured or returned unusable output, still
+    # give the user a complete day-wise plan from the syllabus they supplied.
+    if not plan_days_all:
+        topics = _clean_syllabus_topics(syllabus, exam, subject)
+        plan_days_all = _build_offline_plan_days(
+            topics, today + timedelta(days=1), gen_days, daily_hours
+        )
 
     try:
         plan_days = plan_days_all
