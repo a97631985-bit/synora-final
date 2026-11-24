@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  {% include "head.html" %}
+</head>
+<body class="bg-background text-on-surface antialiased min-h-screen flex flex-col pt-16 selection:bg-primary-container selection:text-on-primary-container">
+<div class="ambient-bg"></div>
+{% include "public_nav.html" %}
+
+<main class="flex-grow w-full max-w-[900px] mx-auto px-5 md:px-8 py-10 md:py-16">
+  <div class="mb-8">
+    <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass-panel text-primary text-xs font-semibold uppercase tracking-widest border border-primary/20">
+      <span class="material-symbols-outlined text-[16px]">shield</span>
+      Privacy
+    </span>
+    <h1 class="text-3xl md:text-4xl font-bold tracking-[-0.03em] mt-4 mb-3">Privacy Policy</h1>
+    <p class="text-on-surface-variant">Last updated: November 2026</p>
+  </div>
+
+  <div class="glass-panel rounded-2xl p-6 md:p-8 flex flex-col gap-7 text-sm leading-relaxed text-on-surface-variant">
+    <section>
+      <h2 class="text-lg font-bold text-on-surface mb-2">What we collect</h2>
+      <p>When you create an account we store your name, email address, and a securely hashed password. As you use Synora we store the study information you choose to add: tasks, timetable entries, exam plans, quiz results, focus sessions, energy check-ins, and community posts you publish.</p>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-bold text-on-surface mb-2">How we use it</h2>
+      <p>Your data is used to run the features you ask for — generating schedules, adapting your plan when tasks are missed, tracking progress, and showing your own analytics. We do not sell your personal data.</p>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-bold text-on-surface mb-2">AI processing</h2>
+      <p>Some features send the text you provide (for example a syllabus excerpt or a quiz request) to our AI provider so it can generate a response. Only the content needed for that request is sent. Do not paste sensitive personal information into AI prompts.</p>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-bold text-on-surface mb-2">Cookies and sessions</h2>
+      <p>We use a session cookie to keep you signed in and to remember your theme preference. The cookie is HTTP-only and is not used for advertising. You can clear it at any time by logging out or clearing your browser storage.</p>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-bold text-on-surface mb-2">Storage and security</h2>
+      <p>Data is stored in our application database. Passwords are hashed, not stored in plain text, and access is limited to the systems that need it. No online service can guarantee absolute security, so please use a unique password.</p>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-bold text-on-surface mb-2">Your choices</h2>
+      <p>You can edit your profile, change your password, and delete community posts you created. To request deletion of your account and associated study data, contact us at the address below.</p>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-bold text-on-surface mb-2">Contact</h2>
+      <p>Questions about this policy? Reach us at <a href="mailto:privacy@synora.app" class="text-primary font-semibold hover:underline">privacy@synora.app</a>.</p>
+    </section>
+
+    <p class="text-xs text-on-surface-variant/80 border-t border-white/5 pt-4">This policy describes the current Synora demo application and may be updated as the product evolves.</p>
+  </div>
+
+  <div class="flex flex-wrap gap-3 mt-8">
+    <a href="/features" class="text-sm font-semibold rounded-xl px-4 py-2.5 border border-white/10 text-on-surface-variant hover:text-on-surface hover:bg-white/5 transition-all">Features</a>
+    <a href="/terms" class="text-sm font-semibold rounded-xl px-4 py-2.5 border border-white/10 text-on-surface-variant hover:text-on-surface hover:bg-white/5 transition-all">Terms of Service</a>
+    <a href="/signup" class="text-sm font-bold rounded-xl px-4 py-2.5 synora-gradient text-on-primary hover:opacity-90 transition-all">Get Started</a>
+  </div>
+</main>
+</body>
+</html>

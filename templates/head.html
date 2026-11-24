@@ -294,6 +294,31 @@
   }
   .btn-gradient:hover { opacity: 0.92; transform: translateY(-1px); box-shadow: 0 0 24px rgba(154,211,182,0.35); }
 
+  /* Shared primary action for light mode only, so the existing dark
+     appearance (and the login/signup page-level variants) stays untouched. */
+  html:not(.dark) .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 12px 18px;
+    border-radius: 12px;
+    border: 1px solid transparent;
+    font-family: inherit;
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1.2;
+    cursor: pointer;
+    text-decoration: none;
+    background: linear-gradient(135deg, #9ad3b6 0%, #4cd7f6 100%);
+    color: #003825;
+    transition: transform 0.2s ease, box-shadow 0.3s ease, opacity 0.2s ease;
+  }
+  html:not(.dark) .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 8px 24px rgba(154,211,182,0.25); }
+  html:not(.dark) .btn-primary:active { transform: scale(0.98); }
+  html:not(.dark) .btn-primary:focus-visible { outline: 2px solid #4cd7f6; outline-offset: 2px; }
+  html:not(.dark) .btn-primary:disabled { opacity: 0.55; cursor: not-allowed; transform: none; box-shadow: none; }
+
   .social-btn {
     background: rgba(50, 53, 54, 0.5);
     border: 1px solid rgba(255, 255, 255, 0.08);
@@ -325,6 +350,18 @@
     border-color: rgba(15, 40, 28, 0.09);
     box-shadow: 0 8px 24px rgba(15, 40, 28, 0.05);
   }
+  /* The supplied logo has a dark background baked into the PNG.
+     Swap to the transparent/dark-wordmark variant on light pages. */
+  html:not(.dark) img[alt="Synora AI Logo"],
+  html:not(.dark) img[alt="Synora"] {
+    content: url("/static/logo-light.png");
+  }
+  /* Dimmed "missed task" demo card: keep it de-emphasised without
+     dropping below readable contrast in light mode. */
+  html:not(.dark) input[name="option"] { accent-color: #0f6b4a; }
+  html:not(.dark) .delayed-task { opacity: 0.88; }
+  html:not(.dark) .delayed-task .text-on-surface-variant { color: #33403a; }
+  html:not(.dark) .delayed-task .text-error { color: #a11414; }
   html:not(.dark) .glass-strong {
     background: rgba(255, 255, 255, 0.94);
     border-color: rgba(15, 40, 28, 0.1);
@@ -333,11 +370,32 @@
   html:not(.dark) .synora-gradient {
     background: linear-gradient(135deg, #0f6b4a 0%, #0e7490 100%);
   }
+  /* Some controls swap text-on-primary in via JS while a lower-contrast
+     text-on-surface-variant class is still present. Keep solid accent
+     surfaces on white text in light mode. */
+  html:not(.dark) .bg-primary.text-on-primary,
+  html:not(.dark) .bg-secondary.text-on-primary,
+  html:not(.dark) .bg-tertiary.text-on-primary,
+  html:not(.dark) .bg-primary.text-white,
+  html:not(.dark) .bg-secondary.text-white,
+  html:not(.dark) .bg-tertiary.text-white {
+    color: #ffffff !important;
+  }
   html:not(.dark) .synora-gradient:disabled {
     background: rgba(15, 40, 28, 0.12);
-    color: #5b665f;
+    color: #4d5851;
     box-shadow: none;
     opacity: 1;
+  }
+  html:not(.dark) .text-error { color: #9f1d1d !important; }
+  html:not(.dark) .text-primary\/70 { color: #0f6b4a !important; }
+  html:not(.dark) .text-on-surface-variant\/70,
+  html:not(.dark) .text-on-surface-variant\/80 { color: #4d5851 !important; }
+  html:not(.dark) ::placeholder { color: #626c65 !important; opacity: 1; }
+  /* Light-mode dialogs should dim the page softly, not turn it black. */
+  html:not(.dark) .inset-0.bg-black\/60,
+  html:not(.dark) .inset-0.bg-black\/70 {
+    background-color: rgba(15, 40, 28, 0.3) !important;
   }
   html:not(.dark) .text-gradient {
     background: linear-gradient(135deg, #0f6b4a 0%, #0e7490 100%);
@@ -347,6 +405,19 @@
   html:not(.dark) .btn-gradient {
     background: linear-gradient(135deg, #0f6b4a 0%, #15803d 100%);
     color: #ffffff;
+  }
+  html:not(.dark) .btn-primary {
+    background: linear-gradient(135deg, #0f6b4a 0%, #0e7490 100%);
+    color: #ffffff;
+  }
+  html:not(.dark) .btn-primary:hover {
+    box-shadow: 0 8px 24px rgba(15, 107, 74, 0.28);
+  }
+  html:not(.dark) .btn-primary:focus-visible { outline-color: #0e7490; }
+  html:not(.dark) .btn-primary:disabled {
+    background: rgba(15, 40, 28, 0.12);
+    color: #4d5851;
+    opacity: 1;
   }
   html:not(.dark) .social-btn {
     background: rgba(255, 255, 255, 0.85);

@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  {% include "head.html" %}
+</head>
+<body class="bg-background text-on-surface antialiased min-h-screen flex flex-col pt-16 selection:bg-primary-container selection:text-on-primary-container">
+<div class="ambient-bg"></div>
+{% include "public_nav.html" %}
+
+<main class="flex-grow w-full max-w-[900px] mx-auto px-5 md:px-8 py-10 md:py-16">
+  <div class="mb-8">
+    <span class="inline-flex items-center gap-2 px-3 py-1.5 rounded-full glass-panel text-primary text-xs font-semibold uppercase tracking-widest border border-primary/20">
+      <span class="material-symbols-outlined text-[16px]">gavel</span>
+      Terms
+    </span>
+    <h1 class="text-3xl md:text-4xl font-bold tracking-[-0.03em] mt-4 mb-3">Terms of Service</h1>
+    <p class="text-on-surface-variant">Last updated: November 2026</p>
+  </div>
+
+  <div class="glass-panel rounded-2xl p-6 md:p-8 flex flex-col gap-7 text-sm leading-relaxed text-on-surface-variant">
+    <section>
+      <h2 class="text-lg font-bold text-on-surface mb-2">Using Synora</h2>
+      <p>By creating an account or using Synora, you agree to these terms. Synora is a study-planning tool for students. You must be old enough to use online services in your region, or have permission from a parent or guardian.</p>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-bold text-on-surface mb-2">Your account</h2>
+      <p>Keep your login details private and provide accurate information. You are responsible for activity under your account. Tell us promptly if you believe your account has been accessed without permission.</p>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-bold text-on-surface mb-2">Acceptable use</h2>
+      <ul class="list-disc pl-5 flex flex-col gap-1">
+        <li>Do not post unlawful, abusive, hateful, or misleading content.</li>
+        <li>Do not attempt to break, overload, or bypass the security of the service.</li>
+        <li>Do not upload content you do not have the right to share.</li>
+        <li>Do not use the service to cheat on exams or violate your school's rules.</li>
+      </ul>
+      <p class="mt-2">We may remove content or suspend accounts that violate these rules.</p>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-bold text-on-surface mb-2">AI-generated content</h2>
+      <p>Synora uses AI to generate schedules, quizzes, explanations, and suggestions. AI output can be incomplete or wrong. Treat it as a study aid, not professional or academic advice, and verify important information yourself.</p>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-bold text-on-surface mb-2">Your content</h2>
+      <p>You keep ownership of the content you create. You give us permission to store and process it so we can provide the service, including showing your posts to other users when you choose to publish them.</p>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-bold text-on-surface mb-2">Availability and changes</h2>
+      <p>Synora is provided as-is. Features may change, and the service may be unavailable during maintenance or due to circumstances outside our control. We may update these terms; continued use after an update means you accept the revised terms.</p>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-bold text-on-surface mb-2">Limitation of liability</h2>
+      <p>To the extent permitted by law, Synora is not liable for indirect or consequential losses, missed deadlines, exam outcomes, or data loss arising from use of the service. Back up anything important.</p>
+    </section>
+
+    <section>
+      <h2 class="text-lg font-bold text-on-surface mb-2">Contact</h2>
+      <p>Questions about these terms? Email <a href="mailto:support@synora.app" class="text-primary font-semibold hover:underline">support@synora.app</a>.</p>
+    </section>
+
+    <p class="text-xs text-on-surface-variant/80 border-t border-white/5 pt-4">These terms apply to the current Synora demo application and may be updated as the product evolves.</p>
+  </div>
+
+  <div class="flex flex-wrap gap-3 mt-8">
+    <a href="/features" class="text-sm font-semibold rounded-xl px-4 py-2.5 border border-white/10 text-on-surface-variant hover:text-on-surface hover:bg-white/5 transition-all">Features</a>
+    <a href="/privacy" class="text-sm font-semibold rounded-xl px-4 py-2.5 border border-white/10 text-on-surface-variant hover:text-on-surface hover:bg-white/5 transition-all">Privacy Policy</a>
+    <a href="/signup" class="text-sm font-bold rounded-xl px-4 py-2.5 synora-gradient text-on-primary hover:opacity-90 transition-all">Get Started</a>
+  </div>
+</main>
+</body>
+</html>
