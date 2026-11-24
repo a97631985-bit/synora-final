@@ -2,6 +2,7 @@ import os
 import json
 import uuid
 import random
+import tempfile
 from functools import wraps
 from datetime import datetime, timedelta
 
@@ -166,9 +167,15 @@ db_url = os.environ.get("DATABASE_URL", "")
 if db_url and db_url.startswith("postgres://"):
     db_url = db_url.replace("postgres://", "postgresql://", 1)
 if not db_url:
-    # local SQLite file in instance folder
-    os.makedirs(app.instance_path, exist_ok=True)
-    db_url = "sqlite:///" + os.path.join(app.instance_path, "synora.db")
+    # Local SQLite file in instance folder. Serverless filesystems are read-only
+    # and the ignored instance/ folder is absent in a fresh checkout, so use
+    # the writable temp directory there instead of failing at import time.
+    if os.environ.get("VERCEL"):
+        db_dir = tempfile.gettempdir()
+    else:
+        db_dir = app.instance_path
+        os.makedirs(db_dir, exist_ok=True)
+    db_url = "sqlite:///" + os.path.join(db_dir, "synora.db")
 app.config["SQLALCHEMY_DATABASE_URI"] = db_url
 app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 # Serverless (Vercel) tuning — short-lived function instances must not keep
